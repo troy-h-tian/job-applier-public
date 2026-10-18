@@ -1,0 +1,113 @@
+name: Job applier
+
+# This repo is public and holds only code. Personal data (profile, resume, application log,
+# leads, synced emails) lives in a private repo that each run checks out into private/ and pushes
+# results back to. Nothing personal is printed to these (public) logs or uploaded as artifacts.
+
+on:
+  schedule:
+    # 15:17 and 23:17 UTC = 8:17am and 4:17pm Pacific (daylight time). Off the top of the hour,
+    # since GitHub delays or drops scheduled runs most often at :00.
+    - cron: "17 15,23 * * *"
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "Override the private config/search.yaml mode for this run"
+        type: choice
+        options: [config, dry_run, submit]
+        default: config
+
+permissions:
+  contents: write   # only for the last-run.txt heartbeat below
+
+concurrency:
+  group: job-applier
+  cancel-in-progress: false
+
+env:
+  DATA_REPO: troy-h-tian/job-applier   # the private data repo
+
+jobs:
+  apply:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360   # GitHub's maximum for a job
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check credentials
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ] && [ -z "$CLAUDE_CODE_OAUTH_TOKEN" ]; then
+            echo "::error::Set the ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN repository secret."
+            exit 1
+          fi
+          if [ -z "$DATA_REPO_TOKEN" ]; then
+            echo "::error::Set the DATA_REPO_TOKEN secret (a token with Contents: Read and write on $DATA_REPO)."
+            exit 1
+          fi
+
+      - name: Check out private data
+        uses: actions/checkout@v4
+        with:
+          repository: ${{ env.DATA_REPO }}
+          token: ${{ secrets.DATA_REPO_TOKEN }}
+          path: private
+
+      - name: Link private data into place
+        run: ln -s private/config config && ln -s private/resume resume && ln -s private/data data
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+          npm install -g @anthropic-ai/claude-code
+          # Warm the Playwright MCP package; it drives the runner's preinstalled Google Chrome.
+          npx -y @playwright/mcp@0.0.83 --help > /dev/null
+
+      - name: Find jobs and apply
+        timeout-minutes: 345   # run.sh stops starting batches at 330; leaves time to save
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          CLAUDE_CODE_OAUTH_TOKEN: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          WORKDAY_PASSWORD: ${{ secrets.WORKDAY_PASSWORD }}
+          DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}   # reads and deletes approved codes
+          CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'sonnet' }}
+          MAX_BUDGET_USD: ${{ vars.MAX_BUDGET_USD }}   # optional per-batch spending cap
+          APPLIER_MODE: ${{ inputs.mode == 'config' && '' || inputs.mode }}
+          PUBLIC_LOGS: "1"   # agent output goes to private/data/logs/, not this log
+        run: scripts/run.sh
+
+      - name: Save results to the private repo
+        if: always()
+        run: |
+          python3 scripts/report.py --counts-only >> "$GITHUB_STEP_SUMMARY"
+          cd private
+          git config user.name "job-applier[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A data config
+          if ! git diff --cached --quiet; then
+            git commit -q -m "Job applier run $(date -u +%Y-%m-%dT%H:%MZ)"
+            git pull -q --rebase && git push -q
+          fi
+
+      # Scheduled workflows in public repos are disabled after 60 days without repo activity, and
+      # results go to the private repo, so record each run here to keep the schedule alive.
+      - name: Heartbeat
+        if: always()
+        run: |
+          date -u +%Y-%m-%dT%H:%M:%SZ > last-run.txt
+          git config user.name "job-applier[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add last-run.txt
+          git commit -q -m "Heartbeat" && git pull -q --rebase && git push -q

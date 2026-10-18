@@ -1,0 +1,9 @@
+# Personal data lives in the private data repo, cloned at private/ and linked into place.
+private/
+config
+resume
+data
+last-run.txt.tmp
+.claude/settings.local.json
+__pycache__/
+.DS_Store
