@@ -1,5 +1,5 @@
 """MCP server giving the agent its own tools (recording outcomes, receiving codes the candidate
-approved) so it never needs a shell."""
+approved and Workday account-verification links) so it never needs a shell."""
 
 import sys
 from pathlib import Path
@@ -47,6 +47,19 @@ def wait_for_approved_code(company: str, max_wait_minutes: int = 10) -> str:
     """
     minutes = max(1, min(max_wait_minutes, 12))
     return codes.describe(codes.wait_for_codes(minutes), minutes)
+
+
+@server.tool()
+def wait_for_workday_verification(application_url: str, max_wait_minutes: int = 8) -> str:
+    """Call this when Workday says it sent an email to verify the new candidate account.
+
+    Verification emails from Workday are relayed here automatically. Waits up to max_wait_minutes
+    (max 12) and returns the verification link(s) from the same Workday site, or a message saying
+    none arrived, in which case record needs_human.
+    application_url: the current myworkdayjobs.com page URL, so the email can be matched to this site.
+    """
+    minutes = max(1, min(max_wait_minutes, 12))
+    return codes.describe_verification(codes.wait_for_verification(application_url, minutes), minutes)
 
 
 if __name__ == "__main__":

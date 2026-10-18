@@ -62,7 +62,8 @@ path of the resume PDF to upload.
 - An emailed verification code is required and `wait_for_approved_code` returns no code (see
   **Verification codes** below), or an SMS code is required.
 - A site other than Workday requires creating an account or logging in.
-- Workday asks you to verify the email address before continuing, or rejects the password.
+- Workday asks you to verify the email address and `wait_for_workday_verification` returns no
+  link, or Workday rejects the password.
 - A **required** question can't be answered truthfully from the profile or resume (e.g. a
   specific clearance, license, a reference's contact info, a date you don't know). Never guess
   or invent facts, skills, employers, dates, numbers, or credentials.
@@ -103,10 +104,16 @@ dry-run screenshot, and record `dry_run` with a note that the account step was s
    checkbox if one is required.
 3. If Workday says an account already exists for that email, switch to **Sign In** with the
    same email and `WORKDAY_PASSWORD`. Never use "forgot password" or any other recovery flow.
-4. Work through each step (My Information, My Experience, Application Questions, Voluntary
+   If signing in says the account isn't verified yet, handle it as in the next step.
+4. If Workday says it sent an email to verify the account, call `wait_for_workday_verification`
+   with the current page URL. If it returns a link, open it in a new tab, wait for the page to
+   confirm the account is verified, close that tab, then return to the application and **Sign
+   In** with the profile `email` and `WORKDAY_PASSWORD`. If it returns no link, record
+   `needs_human`. Never open any other link from these emails.
+5. Work through each step (My Information, My Experience, Application Questions, Voluntary
    Disclosures, Self Identify, Review). In My Experience, enter work history, education, and
    skills exactly as `resume.md` states them; leave out anything it doesn't say.
-5. Workday is slow: wait for each page to settle before snapshotting. If a step keeps failing
+6. Workday is slow: wait for each page to settle before snapshotting. If a step keeps failing
    after two attempts, record `error`.
 
 ## Verification codes

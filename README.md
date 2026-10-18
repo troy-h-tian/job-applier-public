@@ -75,6 +75,12 @@ Some sites (often Greenhouse) email a security code before accepting an applicat
 waiting agent enters the code and submits, and the relayed copy is deleted. Codes without a
 "yes" reply are never relayed. CAPTCHAs are never attempted.
 
+Workday's "verify your candidate account" emails are relayed automatically (no reply needed),
+because the agent created that account itself: only emails from `@myworkday.com`, and only their
+links on `myworkdayjobs.com`/`myworkday.com`. The agent opens the link from the same Workday site
+it is applying on, then signs in and continues. After updating the Apps Script, run `install`
+again so the new trigger is created.
+
 ## Tuning (in the private `config/search.yaml`)
 
 - **Where it looks:** board names under `sources`, plus Workday career-site URLs.

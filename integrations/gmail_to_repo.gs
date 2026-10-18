@@ -9,7 +9,8 @@
 //                       "Contents: Read and write" permission.
 //   3. Editor → select the `install` function → Run → approve the permissions prompt.
 //      That syncs the last week of alerts now and then every 2 hours automatically, and checks
-//      for approved verification codes every minute (see relayApprovedCodes below).
+//      for approved verification codes and Workday account-verification emails every minute
+//      (see relayApprovedCodes and relayWorkdayVerifications below).
 //   After pasting a newer version of this file, run `install` again to refresh the triggers.
 
 const REPO = 'troy-h-tian/job-applier';
@@ -155,9 +156,59 @@ function putFile_(token, path, text, message) {
   if (code >= 300 && code !== 422) throw new Error('GitHub API ' + code + ': ' + res.getContentText());
 }
 
+// ---------------------------------------------------------------------------------------------
+// Workday account verification. After the agent creates a Workday candidate account, some sites
+// email a "verify your candidate account" link before the application can continue. These are
+// relayed to data/verify/ automatically (no reply needed), but only from @myworkday.com senders,
+// and only the email's links that point at Workday itself.
+
+const VERIFY_QUERY = 'from:myworkday.com newer_than:1d (verify OR verification OR activate)';
+const WORKDAY_HOST = /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*\.(myworkdayjobs|myworkday)\.com(\/|$)/i;
+
+function relayWorkdayVerifications() {
+  const props = PropertiesService.getScriptProperties();
+  const token = props.getProperty('GITHUB_TOKEN');
+  if (!token) throw new Error('Add the GITHUB_TOKEN script property first (Project Settings → Script properties).');
+  const relayed = new Set(JSON.parse(props.getProperty('RELAYED_VERIFY_IDS') || '[]'));
+
+  for (const thread of GmailApp.search(VERIFY_QUERY, 0, 20)) {
+    for (const msg of thread.getMessages()) {
+      if (relayed.has(msg.getId()) || !/@myworkday\.com$/.test(addr_(msg.getFrom()))) continue;
+      if (!/verif|activat/i.test(msg.getSubject() + ' ' + msg.getPlainBody().slice(0, 2000))) continue;
+      const links = workdayLinks_(msg.getBody());
+      if (links.length) {
+        const text = [
+          'From: ' + msg.getFrom(),
+          'Date: ' + msg.getDate().toISOString(),
+          'Subject: ' + msg.getSubject(),
+          '',
+          'Links:',
+        ].concat(links).join('\n');
+        putFile_(token, 'data/verify/' + msg.getId() + '.txt', text, 'Relay Workday account verification');
+        msg.markRead();
+      }
+      relayed.add(msg.getId());
+    }
+  }
+  props.setProperty('RELAYED_VERIFY_IDS', JSON.stringify(Array.from(relayed).slice(-200)));
+}
+
+// Every distinct https link in an HTML email whose host is on myworkdayjobs.com / myworkday.com.
+function workdayLinks_(html) {
+  const out = [];
+  const re = /<a\b[^>]*href\s*=\s*["']([^"']+)["']/gi;
+  let m;
+  while ((m = re.exec(html)) && out.length < 20) {
+    const url = m[1].replace(/&amp;/g, '&').trim();
+    if (WORKDAY_HOST.test(url) && out.indexOf(url) < 0) out.push(url);
+  }
+  return out;
+}
+
 function install() {
   ScriptApp.getProjectTriggers().forEach((t) => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('syncJobEmails').timeBased().everyHours(2).create();
   ScriptApp.newTrigger('relayApprovedCodes').timeBased().everyMinutes(1).create();
+  ScriptApp.newTrigger('relayWorkdayVerifications').timeBased().everyMinutes(1).create();
   syncJobEmails();
 }
