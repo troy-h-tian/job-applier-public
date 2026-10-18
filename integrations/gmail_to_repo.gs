@@ -122,10 +122,12 @@ function relayApprovedCodes() {
   props.setProperty('RELAYED_CODE_IDS', JSON.stringify(Array.from(relayed).slice(-200)));
 }
 
-// "Jane Doe <JDoe@School.edu>" -> "jdoe@school.edu"
+// "Jane Doe <JDoe+tag@School.edu>" -> "jdoe@school.edu". The +tag is dropped because Gmail delivers
+// name+anything@ to name@, so replies sent from a +tag address (e.g. a canned-response
+// template) are still yours.
 function addr_(s) {
   const m = String(s).match(/<([^>]+)>/);
-  return (m ? m[1] : String(s)).trim().toLowerCase();
+  return (m ? m[1] : String(s)).trim().toLowerCase().replace(/\+[^@]*@/, '@');
 }
 
 function relayCode_(token, codeMsg) {
