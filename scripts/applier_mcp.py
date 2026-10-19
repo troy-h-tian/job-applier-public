@@ -62,5 +62,36 @@ def wait_for_workday_verification(application_url: str, max_wait_minutes: int = 
     return codes.describe_verification(codes.wait_for_verification(application_url, minutes), minutes)
 
 
+@server.tool()
+def make_tailored_resume(
+    job_id: str,
+    bullets: dict[str, list[str]] | None = None,
+    skills_order: dict[str, list[str]] | None = None,
+    section_order: list[str] | None = None,
+    reason: str = "",
+) -> str:
+    """Build a copy of the resume PDF lightly tailored to one job. Optional: the original resume
+    PDF is always fine to upload.
+
+    bullets: entry id -> replacement bullets for that entry, the same number as the original. Entry
+      ids: confidentiality, civ6 (projects); nanobase, cls_lab, spar, drasnin, anderson (experience).
+      Reword or reorder only: same facts and numbers, no new tools, names or claims, and no longer
+      than the original. Leave out entries you don't change.
+    skills_order: skills label ("Programming Languages", "Technologies and Frameworks") -> the same
+      items reordered, most relevant first.
+    section_order: ["experience", "projects"] to put Experience first; omit to keep the original.
+    reason: one sentence on what you emphasized for this company.
+    Returns the PDF path to upload, or the problems found (fix them and retry once, or upload the
+    original resume PDF).
+    """
+    import tailor
+
+    try:
+        path = tailor.tailor(job_id, bullets, skills_order, section_order, reason)
+    except (ValueError, RuntimeError) as e:
+        return f"Not built:\n{e}\nFix these and call again once, or upload the original resume PDF."
+    return f"Tailored resume built. Upload this file: {path}"
+
+
 if __name__ == "__main__":
     server.run()

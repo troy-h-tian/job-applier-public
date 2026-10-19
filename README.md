@@ -1,6 +1,6 @@
 # job-applier
 
-An unattended internship application agent. Twice a day, GitHub Actions:
+An unattended internship application agent. Three times a day, GitHub Actions:
 
 1. **Discovers** new postings from company job boards (Greenhouse, Lever, Ashby and Workday
    public APIs), the SimplifyJobs internship feed, job-alert emails (WayUp, Handshake, LinkedIn),
@@ -11,7 +11,8 @@ An unattended internship application agent. Twice a day, GitHub Actions:
    (`scripts/prescreen.py`).
 3. **Applies** by running Claude Code headlessly with a Playwright browser (`scripts/run.sh`,
    `prompts/apply.md`). Claude scores fit against the candidate's resume, fills out the form,
-   uploads the resume, writes short grounded answers, and submits.
+   uploads the resume (optionally a copy tailored to the company, see below) and the transcript if
+   asked, writes short answers grounded in the resume and the company's stated values, and submits.
 4. **Records every outcome** in the private data repo: the application log, `APPLIED.md`, and
    `NEEDS_YOU.md` for anything that needs a human (CAPTCHAs, unanswerable questions).
 
@@ -25,8 +26,11 @@ config/profile.yaml       contact info, work authorization, canned answers
 config/search.yaml        target roles, sources, filters, limits
 config/writing_style.md   rules for cover letters and free-text answers
 config/extra_jobs.txt     hand-picked application links
-resume/resume.md, .pdf    resume text (what Claude may say) and the file to upload
-data/                     application log, reports, leads, synced emails, private run logs
+resume/resume.md, .pdf    resume text (what Claude may say) and the file to upload: the ground truth
+resume/resume.yaml        structured copy of resume.md, used only to build tailored PDFs
+resume/transcript_*.pdf   unofficial and official transcripts, uploaded only where a form asks
+data/                     application log, reports, leads, synced emails, private run logs,
+                          tailored resumes (data/tailored/) and per-batch usage (data/usage.jsonl)
 ```
 
 Each run checks the private repo out into `private/`, links `config/`, `resume/` and `data/` into
@@ -45,8 +49,9 @@ days without activity.
      characters with upper, lower, number and symbol; no single quotes. Claude never sees it:
      the browser tool fills it in.
 3. Set `DATA_REPO` in `.github/workflows/apply.yml` to the private repo's name.
-4. Optional repository **variables**: `CLAUDE_MODEL` (default `sonnet`), `MAX_BUDGET_USD`
-   (spending cap per batch of 15 jobs; none by default).
+4. Optional repository **variables**: `CLAUDE_MODEL` (default `sonnet`), `MAX_BATCHES_PER_RUN`
+   (default `6`; `0` = no cap, see **Usage** below), `MAX_BUDGET_USD` (spending cap per batch of
+   15 jobs, API key only; none by default).
 5. Run it once from **Actions → Job applier → Run workflow**.
 
 ## Job-alert emails
@@ -81,14 +86,48 @@ links on `myworkdayjobs.com`/`myworkday.com`. The agent opens the link from the 
 it is applying on, then signs in and continues. After updating the Apps Script, run `install`
 again so the new trigger is created.
 
+## Tailored resumes
+
+For each application Claude may build a copy of the resume that leans toward the company: it can
+reword or reorder up to 3 bullets, put the most relevant skills first, and put Experience before
+Projects. The original `resume.pdf` stays the ground truth and the default upload.
+`scripts/tailor.py` builds the copy from `resume.yaml` with the original's LaTeX layout (Jake's
+Resume, compiled with [Tectonic](https://tectonic-typesetting.github.io)) and refuses any version
+that:
+
+- changes a heading, title, date, contact detail or the number of bullets,
+- adds a number the original bullet doesn't have, or a name, tool or term not in the resume,
+- uses more than a few words that aren't in the resume, grows an entry by more than 8%, or
+  spills past one page,
+- adds, drops or renames a skill (reordering only).
+
+Every check also confirms that `resume.yaml` still matches `resume.md` word for word, so **after
+editing your resume, update `resume.md`, `resume.pdf` and `resume.yaml` together**
+(`python3 scripts/tailor.py --check` shows mismatches). Each tailored PDF and the changes behind it
+are saved under `data/tailored/<job id>/`, so you can see exactly what was sent.
+
+## Usage
+
+Runs use your Claude subscription (`CLAUDE_CODE_OAUTH_TOKEN`), which allows a certain amount per
+5-hour window plus a weekly cap, shared with your own use of Claude. The schedule is 8:17am,
+1:27pm and 6:37pm Pacific (an hour earlier in winter), just over 5 hours apart, so each run starts
+in a fresh window, while you're awake to approve emailed codes. Each run stops after
+`MAX_BATCHES_PER_RUN` batches (default 6) or as soon as Claude reports a usage limit, leaving some
+of the window for you.
+
+Each batch's cost is appended to `data/usage.jsonl` (`cost_usd` is the API-equivalent price; on a
+subscription nothing extra is charged). To calibrate, compare a few days of it with
+**claude.ai → Settings → Usage**: if the weekly bar fills before the week ends, lower
+`MAX_BATCHES_PER_RUN` or remove a cron line; if it never gets close, raise it.
+
 ## Tuning (in the private `config/search.yaml`)
 
 - **Where it looks:** board names under `sources`, plus Workday career-site URLs.
 - **How picky:** `min_fit_score`, the free-text `preferences`, and the `title_*` / `locations_*`
   pre-filters.
-- **How much:** no self-imposed limits by default; each run works through the queue in batches of
-  15 until it's empty, Claude's usage limit is hit, or GitHub's 6-hour job limit nears. Set any
-  value under `limits` to cap it.
+- **How much:** each run works through the queue in batches of 15 until it's empty,
+  `MAX_BATCHES_PER_RUN` is reached, Claude's usage limit is hit, or GitHub's 6-hour job limit
+  nears. Set any value under `limits` to cap applications too.
 
 ## Run locally
 
@@ -97,6 +136,7 @@ Clone the private repo into `private/` and link it into place, then run:
 ```bash
 ln -s private/config config && ln -s private/resume resume && ln -s private/data data
 pip install -r requirements.txt
+brew install tectonic                 # optional: tailored resumes (otherwise the original is used)
 APPLIER_MODE=dry_run scripts/run.sh   # uses your logged-in Claude Code and local Chrome
 ```
 
@@ -104,7 +144,7 @@ APPLIER_MODE=dry_run scripts/run.sh   # uses your logged-in Claude Code and loca
 
 - Supported application sites: Greenhouse, Lever, Ashby, Workday. iCIMS, Taleo and custom
   portals are filtered out.
-- Some Workday sites require email verification before you can apply; those land in
-  `NEEDS_YOU.md`.
+- Workday account-verification emails are relayed automatically; if one doesn't arrive within
+  8 minutes, the job lands in `NEEDS_YOU.md`.
 - You're responsible for what gets submitted in your name. Keep the resume and profile accurate
   and read `APPLIED.md` now and then.

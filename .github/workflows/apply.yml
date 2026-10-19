@@ -6,9 +6,13 @@ name: Job applier
 
 on:
   schedule:
-    # 15:17 and 23:17 UTC = 8:17am and 4:17pm Pacific (daylight time). Off the top of the hour,
-    # since GitHub delays or drops scheduled runs most often at :00.
-    - cron: "17 15,23 * * *"
+    # Three runs a day, a little over 5 hours apart, so each starts in a fresh 5-hour Claude usage
+    # window: 8:17am, 1:27pm and 6:37pm Pacific daylight time (an hour earlier in winter). All are
+    # while you're awake to approve emailed codes. Off the top of the hour, since GitHub delays or
+    # drops scheduled runs most often at :00.
+    - cron: "17 15 * * *"
+    - cron: "27 20 * * *"
+    - cron: "37 1 * * *"
   workflow_dispatch:
     inputs:
       mode:
@@ -75,6 +79,26 @@ jobs:
           # Warm the Playwright MCP package; it drives the runner's preinstalled Google Chrome.
           npx -y @playwright/mcp@0.0.83 --help > /dev/null
 
+      # Tectonic compiles per-company tailored resumes (scripts/tailor.py); its TeX files are cached.
+      - name: Install Tectonic
+        run: |
+          curl -fsSL https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.15.0/tectonic-0.15.0-x86_64-unknown-linux-musl.tar.gz \
+            | sudo tar xz -C /usr/local/bin tectonic
+
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/Tectonic
+          key: tectonic-0.15.0-${{ hashFiles('scripts/resume_template.tex') }}
+          restore-keys: tectonic-0.15.0-
+
+      - name: Check the tailored-resume setup
+        run: |
+          # Quiet on purpose: the check's messages quote the resume, and this log is public.
+          if ! python3 scripts/tailor.py --check > /dev/null; then
+            echo "::warning::resume/resume.yaml no longer matches resume.md; tailored resumes will be refused until it's updated."
+          fi
+          python3 scripts/tailor.py --base /tmp/base-resume.pdf > /dev/null || echo "::warning::Tectonic could not build the resume; the original PDF will be used."
+
       - name: Find jobs and apply
         timeout-minutes: 345   # run.sh stops starting batches at 330; leaves time to save
         env:
@@ -84,6 +108,7 @@ jobs:
           DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}   # reads and deletes approved codes
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'sonnet' }}
           MAX_BUDGET_USD: ${{ vars.MAX_BUDGET_USD }}   # optional per-batch spending cap
+          MAX_BATCHES_PER_RUN: ${{ vars.MAX_BATCHES_PER_RUN || '6' }}   # 0 = until the queue or usage runs out
           APPLIER_MODE: ${{ inputs.mode == 'config' && '' || inputs.mode }}
           PUBLIC_LOGS: "1"   # agent output goes to private/data/logs/, not this log
         run: scripts/run.sh

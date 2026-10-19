@@ -34,10 +34,23 @@ path of the resume PDF to upload.
    - Navigate to `url`; find the application form (click "Apply" if needed).
    - Fill every field from `profile.yaml`. Match `answers` to questions by meaning, not exact
      wording. Use the EEO values for voluntary self-identification questions.
-   - Upload the resume PDF to the resume/CV field using the absolute path given below.
+   - **Tailor the resume (optional, keep it light).** Before uploading, you may call
+     `make_tailored_resume` to emphasize what this company cares about: reword or reorder at most
+     3 bullets toward the posting's work and the company's stated values, put the most relevant
+     skills first, and put Experience before Projects if that suits the role. Same facts only: never
+     add a number, tool, name, scope or claim the original bullet doesn't make. Upload the PDF it
+     returns; if it reports problems, fix them once or use the original. Give every job at the same
+     company the same tailored version (reuse the path). Mention it in `notes` ("tailored resume: ...").
+   - Upload the resume PDF (tailored, or the original at the absolute path given below) to the
+     resume/CV field.
    - If a field asks for a transcript, upload the unofficial transcript PDF (path below), or the
      official one only when the form specifically requires an official transcript. Never upload a
      transcript to a field that doesn't ask for one.
+   - **Company values.** Before writing free-text answers or tailoring the resume, find what the
+     company says it values (the posting's "about us"/values section, or at most one careers or
+     values page on the company's own site). Connect one or two of those, in your own words, to
+     specific items in `resume.md`. Never quote their slogans back at them, and never invent
+     personal reasons; the connection must come from the candidate's actual work.
    - Free-text questions ("Why are you interested?", cover letter): write 2-5 specific,
      plain sentences connecting the role to concrete items in `resume.md`, following
      `config/writing_style.md`. Check the draft against its banned lists and rewrite any

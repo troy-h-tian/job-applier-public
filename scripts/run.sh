@@ -32,11 +32,18 @@ export MCP_TOOL_TIMEOUT=900000
 budget_args=()
 [ -n "${MAX_BUDGET_USD:-}" ] && budget_args=(--max-budget-usd "$MAX_BUDGET_USD")   # optional
 
-# Work through the whole queue in batches, each in a fresh Claude session (one session can't hold
-# hundreds of jobs). Stop when nothing is left, or before GitHub's 6-hour job limit.
+# Work through the queue in batches, each in a fresh Claude session (one session can't hold
+# hundreds of jobs). Stop when nothing is left, after MAX_BATCHES_PER_RUN batches (leaves part of
+# the subscription's usage for the candidate), when Claude reports a usage limit, or before
+# GitHub's 6-hour job limit.
 deadline=$(( $(date +%s) + ${RUN_MINUTES:-330} * 60 ))
+max_batches=${MAX_BATCHES_PER_RUN:-0}   # 0 = no cap
 batch=0
 while [ "$(date +%s)" -lt "$deadline" ]; do
+  if [ "$max_batches" -gt 0 ] && [ "$batch" -ge "$max_batches" ]; then
+    echo "Stopping after $batch batch(es) (MAX_BATCHES_PER_RUN)."
+    break
+  fi
   python3 scripts/discover.py
   queued=$(python3 -c 'import json; print(len(json.load(open("data/queue.json"))))')
   if [ "$queued" = 0 ]; then
@@ -72,15 +79,45 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
     out="data/logs/$(date -u +%Y-%m-%d).log"
     echo "### $(date -u +%H:%MZ) batch $batch" >> "$out"
   fi
+  # JSON output carries the session's cost: what it would cost on the API (on a subscription it's
+  # an estimate of usage, not a charge). The agent's text goes to $out; cost to data/usage.jsonl.
+  result=$(mktemp)
   claude -p "$prompt" \
     --model "${CLAUDE_MODEL:-sonnet}" \
     --mcp-config mcp.json --strict-mcp-config \
     --permission-mode dontAsk \
     --allowedTools "mcp__playwright" "mcp__applier" "Read" "WebSearch" \
+    --output-format json \
     ${budget_args[@]+"${budget_args[@]}"} \
-    --no-session-persistence >> "$out" 2>&1 || echo "::warning::Batch $batch ended with an error"
+    --no-session-persistence > "$result" 2>&1 || echo "::warning::Batch $batch ended with an error"
+  limited=$(python3 - "$result" "$out" "$batch" <<'PY'
+import datetime as dt, json, re, sys
+raw = open(sys.argv[1]).read()
+try:
+    r = json.loads(raw)
+    text = r.get("result") or ""
+    row = {"at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), "batch": int(sys.argv[3]),
+           "cost_usd": r.get("total_cost_usd"), "minutes": round((r.get("duration_ms") or 0) / 60000, 1),
+           "turns": r.get("num_turns"), "error": r.get("is_error")}
+    with open("data/usage.jsonl", "a") as f:
+        f.write(json.dumps(row) + "\n")
+    print(f"  batch cost (API-equivalent): ${row['cost_usd'] or 0:.2f}, {row['minutes']} min", file=sys.stderr)
+except ValueError:
+    text = raw
+if sys.argv[2] == "/dev/stdout":   # local run: stdout is captured here, so show it on stderr
+    sys.stderr.write(text.rstrip() + "\n")
+else:
+    with open(sys.argv[2], "a") as f:
+        f.write(text.rstrip() + "\n")
+print("1" if re.search(r"hit your .*limit|usage limit|rate limit", text[-500:], re.I) else "0")
+PY
+)
+  rm -f "$result"
+  if [ "$limited" = 1 ]; then
+    echo "::warning::Claude usage limit reached; stopping this run."
+    break
+  fi
   if [ -n "${PUBLIC_LOGS:-}" ]; then
-    tail -n 5 "$out" | grep -qiE "usage limit|session limit|rate limit" && echo "::warning::Claude usage limit reached"
     python3 - "$before" <<'PY'
 import collections, json, sys
 rows = open("data/applications.jsonl").read().splitlines()[int(sys.argv[1]):]
