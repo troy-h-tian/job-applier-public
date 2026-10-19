@@ -35,6 +35,9 @@ path of the resume PDF to upload.
    - Fill every field from `profile.yaml`. Match `answers` to questions by meaning, not exact
      wording. Use the EEO values for voluntary self-identification questions.
    - Upload the resume PDF to the resume/CV field using the absolute path given below.
+   - If a field asks for a transcript, upload the unofficial transcript PDF (path below), or the
+     official one only when the form specifically requires an official transcript. Never upload a
+     transcript to a field that doesn't ask for one.
    - Free-text questions ("Why are you interested?", cover letter): write 2-5 specific,
      plain sentences connecting the role to concrete items in `resume.md`, following
      `config/writing_style.md`. Check the draft against its banned lists and rewrite any

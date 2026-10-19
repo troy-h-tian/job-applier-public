@@ -59,6 +59,8 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
 ## Run context
 - Mode: ${mode}
 - Resume PDF to upload (absolute path): ${PWD}/resume/resume.pdf
+- Unofficial transcript PDF (absolute path): ${PWD}/resume/transcript_unofficial.pdf
+- Official transcript PDF (absolute path): ${PWD}/resume/transcript_official.pdf
 - Jobs in queue: ${queued}
 - Current UTC time: $(date -u +%Y-%m-%dT%H:%MZ)"
 
