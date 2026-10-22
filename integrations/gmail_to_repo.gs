@@ -10,7 +10,8 @@
 //   3. Editor → select the `install` function → Run → approve the permissions prompt.
 //      That syncs the last week of alerts now and then every 2 hours automatically, and checks
 //      for approved verification codes and Workday account-verification emails every minute
-//      (see relayApprovedCodes and relayWorkdayVerifications below).
+//      (see relayApprovedCodes and relayWorkdayVerifications below). It also marks "thank you for
+//      applying" receipts as read every minute (markReceiptsRead).
 //   After pasting a newer version of this file, run `install` again to refresh the triggers.
 
 const REPO = 'troy-h-tian/job-applier';
@@ -208,10 +209,39 @@ function workdayLinks_(html) {
   return out;
 }
 
+// ---------------------------------------------------------------------------------------------
+// Application receipts. "Thank you for applying" emails pile up as unread while the agent works,
+// so they're marked read as they arrive. Anything that looks like an interview, assessment or
+// other next step, or a verification code, is left unread for you.
+
+const RECEIPT_QUERY =
+  'is:unread in:inbox newer_than:2d ("thank you for applying" OR "thanks for applying" OR ' +
+  '"thank you for your application" OR "thanks for your application" OR ' +
+  '"we received your application" OR "we have received your application" OR ' +
+  '"application received" OR "application submitted" OR "your application to" OR ' +
+  '"thank you for your interest")';
+const NEXT_STEP = new RegExp(
+  'interview|assessment|coding challenge|online test|hackerrank|codility|codesignal|schedule|' +
+  'availability|phone screen|invit(e|ation)|next steps?|offer|congratulations|' +
+  'verification code|security code|verify your|one-time|action required', 'i');
+
+function markReceiptsRead() {
+  for (const thread of GmailApp.search(RECEIPT_QUERY, 0, 50)) {
+    for (const msg of thread.getMessages()) {
+      if (!msg.isUnread()) continue;
+      const text = msg.getSubject() + ' ' + msg.getPlainBody().slice(0, 3000);
+      if (!/(thank|thanks)[^.]{0,30}appl|received your application|application (received|submitted)/i
+          .test(text) || NEXT_STEP.test(text)) continue;
+      msg.markRead();
+    }
+  }
+}
+
 function install() {
   ScriptApp.getProjectTriggers().forEach((t) => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('syncJobEmails').timeBased().everyHours(2).create();
   ScriptApp.newTrigger('relayApprovedCodes').timeBased().everyMinutes(1).create();
   ScriptApp.newTrigger('relayWorkdayVerifications').timeBased().everyMinutes(1).create();
+  ScriptApp.newTrigger('markReceiptsRead').timeBased().everyMinutes(1).create();
   syncJobEmails();
 }
