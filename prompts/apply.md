@@ -74,7 +74,10 @@ path of the resume PDF to upload.
 
 ## When to stop and record `needs_human`
 
-- A CAPTCHA or bot check appears. Never attempt to solve or bypass one.
+- A CAPTCHA or bot check appears. Never attempt to solve or bypass one. Exception: if the run
+  context says **assist mode**, the candidate is watching the browser, so instead call
+  `wait_for_candidate` and don't click anything while waiting. If they click Done, snapshot and
+  finish (record `submitted` only if the confirmation appears); otherwise record `needs_human`.
 - An emailed verification code is required and `wait_for_approved_code` returns no code (see
   **Verification codes** below), or an SMS code is required.
 - A site other than Workday requires creating an account or logging in.

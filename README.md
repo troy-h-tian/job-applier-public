@@ -87,6 +87,22 @@ because the agent created that account itself: only their links on
 it is applying on, then signs in and continues. After updating the Apps Script, run `install`
 again so the new trigger is created.
 
+## Assist mode (CAPTCHAs)
+
+The agent never solves CAPTCHAs, so jobs that hit one are recorded as `needs_human`. To finish
+them with the candidate at the screen, run on a Mac:
+
+```bash
+scripts/assist.sh --list    # the jobs waiting on a CAPTCHA or bot check
+scripts/assist.sh           # retry up to 15 of them (--max N, or pass job ids)
+```
+
+A visible browser opens and the agent refills each form, reusing the answers it wrote last time.
+When a CAPTCHA, security code or Workday verification comes up, a dialog asks the candidate to do
+that step in the browser and click Done; the agent then submits and records the outcome, and the
+script pushes the results. In Claude Code, the `captcha-assist` skill does all of this from one
+request.
+
 ## Tailored resumes
 
 For each application Claude may build a copy of the resume that leans toward the company: it can

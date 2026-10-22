@@ -9,6 +9,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 from mcp.server.mcpserver import MCPServer  # noqa: E402
 
+import assist  # noqa: E402
 import codes  # noqa: E402
 from record import record  # noqa: E402
 
@@ -46,6 +47,8 @@ def wait_for_approved_code(company: str, max_wait_minutes: int = 10) -> str:
     company: the employer, so the candidate's approval can be matched to this application.
     """
     minutes = max(1, min(max_wait_minutes, 12))
+    if assist.enabled():
+        return assist.ask_code(company, minutes)
     return codes.describe(codes.wait_for_codes(minutes), minutes)
 
 
@@ -59,7 +62,23 @@ def wait_for_workday_verification(application_url: str, max_wait_minutes: int = 
     application_url: the current myworkdayjobs.com page URL, so the email can be matched to this site.
     """
     minutes = max(1, min(max_wait_minutes, 12))
+    if assist.enabled():
+        return assist.ask_verification(application_url, minutes)
     return codes.describe_verification(codes.wait_for_verification(application_url, minutes), minutes)
+
+
+@server.tool()
+def wait_for_candidate(task: str, max_wait_minutes: int = 10) -> str:
+    """Assist mode only (the run context says so): ask the candidate, who is watching the browser,
+    to do one step by hand, such as solving a CAPTCHA or bot check. Shows them a dialog and waits
+    up to max_wait_minutes (max 12) for them to click Done or Skip.
+
+    task: one sentence saying what to do, e.g. "Solve the CAPTCHA on the Base Power application".
+    """
+    minutes = max(1, min(max_wait_minutes, 12))
+    if not assist.enabled():
+        return "Not in assist mode: nobody is watching the browser. Record needs_human."
+    return assist.ask(task, minutes)
 
 
 @server.tool()
