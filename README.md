@@ -81,8 +81,9 @@ waiting agent enters the code and submits, and the relayed copy is deleted. Code
 "yes" reply are never relayed. CAPTCHAs are never attempted.
 
 Workday's "verify your candidate account" emails are relayed automatically (no reply needed),
-because the agent created that account itself: only emails from `@myworkday.com`, and only their
-links on `myworkdayjobs.com`/`myworkday.com`. The agent opens the link from the same Workday site
+because the agent created that account itself: only their links on
+`myworkdayjobs.com`/`myworkday.com`. The sender isn't checked, since it varies by company
+(`@myworkday.com`, `@otp.workday.com`, the company's own domain). The agent opens the link from the same Workday site
 it is applying on, then signs in and continues. After updating the Apps Script, run `install`
 again so the new trigger is created.
 

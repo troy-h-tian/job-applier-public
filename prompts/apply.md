@@ -116,11 +116,17 @@ dry-run screenshot, and record `dry_run` with a note that the account step was s
    let Workday pre-fill; then check every pre-filled field against `resume.md`).
 2. On the sign-in screen choose **Create Account**. Use the profile `email`. In both the
    password and verify-password fields, type exactly `WORKDAY_PASSWORD`. The browser tool
-   swaps that placeholder for the real password, which you never see. Accept the account terms
-   checkbox if one is required.
+   swaps that placeholder for the real password, which you never see, but **only** in
+   `browser_type`, or `browser_fill_form` with field type `textbox`, and only when the text is
+   exactly `WORKDAY_PASSWORD` and nothing else. Any other way (pressing keys, typing slowly,
+   evaluating JavaScript) types the placeholder literally. So if Workday says the password must
+   include a lowercase or numeric character, the placeholder went in literally: clear both
+   fields, type it again with `browser_type`, and only record `needs_human` if it still fails.
+   Accept the account terms checkbox if one is required.
 3. If Workday says an account already exists for that email, switch to **Sign In** with the
    same email and `WORKDAY_PASSWORD`. Never use "forgot password" or any other recovery flow.
-   If signing in says the account isn't verified yet, handle it as in the next step.
+   If signing in says the account isn't verified yet, click **Resend Account Verification** (or
+   similar) if offered, then handle it as in the next step.
 4. If Workday says it sent an email to verify the account, call `wait_for_workday_verification`
    with the current page URL. If it returns a link, open it in a new tab, wait for the page to
    confirm the account is verified, close that tab, then return to the application and **Sign

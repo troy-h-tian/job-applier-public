@@ -159,10 +159,13 @@ function putFile_(token, path, text, message) {
 // ---------------------------------------------------------------------------------------------
 // Workday account verification. After the agent creates a Workday candidate account, some sites
 // email a "verify your candidate account" link before the application can continue. These are
-// relayed to data/verify/ automatically (no reply needed), but only from @myworkday.com senders,
-// and only the email's links that point at Workday itself.
+// relayed to data/verify/ automatically (no reply needed), but only the email's links that point
+// at Workday itself. Senders vary by company (Workday@paloaltonetworks.com,
+// motorolasolutions@otp.workday.com, ...@myworkday.com), so the sender isn't checked: only a link
+// on a Workday host is relayed, and the agent only opens one from the site it is applying on.
 
-const VERIFY_QUERY = 'from:myworkday.com newer_than:1d (verify OR verification OR activate)';
+const VERIFY_QUERY =
+  'newer_than:1d {from:workday from:myworkday.com myworkdayjobs myworkday} {verify verification activate}';
 const WORKDAY_HOST = /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*\.(myworkdayjobs|myworkday)\.com(\/|$)/i;
 
 function relayWorkdayVerifications() {
@@ -171,9 +174,9 @@ function relayWorkdayVerifications() {
   if (!token) throw new Error('Add the GITHUB_TOKEN script property first (Project Settings → Script properties).');
   const relayed = new Set(JSON.parse(props.getProperty('RELAYED_VERIFY_IDS') || '[]'));
 
-  for (const thread of GmailApp.search(VERIFY_QUERY, 0, 20)) {
+  for (const thread of GmailApp.search(VERIFY_QUERY, 0, 30)) {
     for (const msg of thread.getMessages()) {
-      if (relayed.has(msg.getId()) || !/@myworkday\.com$/.test(addr_(msg.getFrom()))) continue;
+      if (relayed.has(msg.getId())) continue;
       if (!/verif|activat/i.test(msg.getSubject() + ' ' + msg.getPlainBody().slice(0, 2000))) continue;
       const links = workdayLinks_(msg.getBody());
       if (links.length) {
