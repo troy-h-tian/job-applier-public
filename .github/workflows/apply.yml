@@ -80,10 +80,14 @@ jobs:
           npx -y @playwright/mcp@0.0.83 --help > /dev/null
 
       # Tectonic compiles per-company tailored resumes (scripts/tailor.py); its TeX files are cached.
+      # Optional: if the download keeps failing, the run continues and uploads the original resume.
       - name: Install Tectonic
+        continue-on-error: true
         run: |
-          curl -fsSL https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.15.0/tectonic-0.15.0-x86_64-unknown-linux-musl.tar.gz \
-            | sudo tar xz -C /usr/local/bin tectonic
+          curl -fsSL --retry 5 --retry-all-errors --retry-delay 5 \
+            https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%400.15.0/tectonic-0.15.0-x86_64-unknown-linux-musl.tar.gz \
+            -o /tmp/tectonic.tar.gz
+          sudo tar xz -C /usr/local/bin tectonic -f /tmp/tectonic.tar.gz
 
       - uses: actions/cache@v4
         with:
