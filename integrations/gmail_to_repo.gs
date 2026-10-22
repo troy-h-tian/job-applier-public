@@ -212,7 +212,7 @@ function workdayLinks_(html) {
 // ---------------------------------------------------------------------------------------------
 // Application receipts. "Thank you for applying" emails pile up as unread while the agent works,
 // so they're marked read as they arrive. Anything that looks like an interview, assessment or
-// other next step, or a verification code, is left unread for you.
+// other next step is left unread for you. (Codes: see markStaleCodesRead below.)
 
 const RECEIPT_QUERY =
   'is:unread in:inbox newer_than:2d ("thank you for applying" OR "thanks for applying" OR ' +
@@ -233,6 +233,22 @@ function markReceiptsRead() {
       if (!/(thank|thanks)[^.]{0,30}appl|received your application|application (received|submitted)/i
           .test(text) || NEXT_STEP.test(text)) continue;
       msg.markRead();
+    }
+  }
+  markStaleCodesRead();
+}
+
+// Security-code and "verify your ..." emails stay unread for CODE_MAX_AGE_MINUTES so you notice
+// them (a code is approved by replying "yes" to its email), then are marked read.
+const STALE_CODE_QUERY =
+  'is:unread in:inbox newer_than:2d ("security code" OR "verification code" OR "one-time code" OR ' +
+  '"one time code" OR passcode OR "confirmation code" OR "verify your")';
+
+function markStaleCodesRead() {
+  const cutoff = Date.now() - CODE_MAX_AGE_MINUTES * 60 * 1000;
+  for (const thread of GmailApp.search(STALE_CODE_QUERY, 0, 50)) {
+    for (const msg of thread.getMessages()) {
+      if (msg.isUnread() && msg.getDate().getTime() < cutoff) msg.markRead();
     }
   }
 }
