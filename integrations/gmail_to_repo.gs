@@ -182,11 +182,11 @@ function relayWorkdayVerifications() {
   for (const thread of threads) {
     for (const msg of thread.getMessages()) {
       if (relayed.has(msg.getId())) continue;
-      const links = workdayLinks_(msg.getBody());
+      const links = workdayLinks_(msg);
       console.log('Workday email: ' + msg.getFrom() + ' | ' + msg.getSubject() + ' | ' + links.length + ' Workday link(s)');
       if (!links.length) {
         // Not marked as handled, so it is retried (and logged) until the matching is fixed.
-        console.log('  links in the email: ' + allLinks_(msg.getBody()).slice(0, 5).join(' , '));
+        console.log('  links in the email: ' + allLinks_(msg).slice(0, 8).join(' , '));
         continue;
       }
       const text = [
@@ -204,24 +204,24 @@ function relayWorkdayVerifications() {
   props.setProperty('RELAYED_VERIFY_IDS', JSON.stringify(Array.from(relayed).slice(-200)));
 }
 
-function allLinks_(html) {
+// Every https address in an email's HTML and plain text, as clickable links or written out. Some
+// Workday emails show the verify link only as text.
+function allLinks_(msg) {
   const out = [];
-  const re = /<a\b[^>]*href\s*=\s*["']([^"']+)["']/gi;
-  let m;
-  while ((m = re.exec(html)) && out.length < 20) out.push(m[1].replace(/&amp;/g, '&').trim().slice(0, 120));
+  const re = /https?:\/\/[^\s"'<>\\]+/gi;
+  for (const body of [msg.getBody(), msg.getPlainBody()]) {
+    let m;
+    while ((m = re.exec(body)) && out.length < 40) {
+      const url = m[0].replace(/&amp;/g, '&').replace(/[.,;:)\]]+$/, '');
+      if (out.indexOf(url) < 0) out.push(url);
+    }
+  }
   return out;
 }
 
-// Every distinct https link in an HTML email whose host is on myworkdayjobs.com / myworkday.com.
-function workdayLinks_(html) {
-  const out = [];
-  const re = /<a\b[^>]*href\s*=\s*["']([^"']+)["']/gi;
-  let m;
-  while ((m = re.exec(html)) && out.length < 20) {
-    const url = m[1].replace(/&amp;/g, '&').trim();
-    if (WORKDAY_HOST.test(url) && out.indexOf(url) < 0) out.push(url);
-  }
-  return out;
+// The distinct links from allLinks_ that are on myworkdayjobs.com / myworkdaysite.com / myworkday.com.
+function workdayLinks_(msg) {
+  return allLinks_(msg).filter((url) => WORKDAY_HOST.test(url)).slice(0, 20);
 }
 
 // ---------------------------------------------------------------------------------------------
