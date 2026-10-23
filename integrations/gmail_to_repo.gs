@@ -180,6 +180,8 @@ function relayWorkdayVerifications() {
       if (relayed.has(msg.getId())) continue;
       if (!/verif|activat/i.test(msg.getSubject() + ' ' + msg.getPlainBody().slice(0, 2000))) continue;
       const links = workdayLinks_(msg.getBody());
+      // View → Executions (or Logs) in Apps Script shows these lines, to diagnose a missing relay.
+      console.log('Workday email: ' + msg.getFrom() + ' | ' + msg.getSubject() + ' | ' + links.length + ' Workday link(s)');
       if (links.length) {
         const text = [
           'From: ' + msg.getFrom(),
