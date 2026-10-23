@@ -165,9 +165,10 @@ function putFile_(token, path, text, message) {
 // motorolasolutions@otp.workday.com, ...@myworkday.com), so the sender isn't checked: only a link
 // on a Workday host is relayed, and the agent only opens one from the site it is applying on.
 
-const VERIFY_QUERY =
-  'newer_than:1d {from:workday from:myworkday.com myworkdayjobs myworkday} {verify verification activate}';
-const WORKDAY_HOST = /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*\.(myworkdayjobs|myworkday)\.com(\/|$)/i;
+// Gmail search skips Spam and Trash unless told otherwise, and verification emails from unfamiliar
+// senders often land in Spam, so search everywhere. Only links on a Workday host are relayed.
+const VERIFY_QUERY = 'in:anywhere newer_than:2d subject:(verify OR verification OR activate) (workday OR myworkdayjobs OR myworkday)';
+const WORKDAY_HOST = /^https:\/\/[a-z0-9-]+(\.[a-z0-9-]+)*\.(myworkdayjobs|myworkdaysite|myworkday)\.com(\/|$)/i;
 
 function relayWorkdayVerifications() {
   const props = PropertiesService.getScriptProperties();
@@ -175,28 +176,40 @@ function relayWorkdayVerifications() {
   if (!token) throw new Error('Add the GITHUB_TOKEN script property first (Project Settings → Script properties).');
   const relayed = new Set(JSON.parse(props.getProperty('RELAYED_VERIFY_IDS') || '[]'));
 
-  for (const thread of GmailApp.search(VERIFY_QUERY, 0, 30)) {
+  // The log lines (Apps Script → Executions → the run) show what the relay saw, to diagnose problems.
+  const threads = GmailApp.search(VERIFY_QUERY, 0, 30);
+  console.log('Workday search found ' + threads.length + ' thread(s)');
+  for (const thread of threads) {
     for (const msg of thread.getMessages()) {
       if (relayed.has(msg.getId())) continue;
-      if (!/verif|activat/i.test(msg.getSubject() + ' ' + msg.getPlainBody().slice(0, 2000))) continue;
       const links = workdayLinks_(msg.getBody());
-      // View → Executions (or Logs) in Apps Script shows these lines, to diagnose a missing relay.
       console.log('Workday email: ' + msg.getFrom() + ' | ' + msg.getSubject() + ' | ' + links.length + ' Workday link(s)');
-      if (links.length) {
-        const text = [
-          'From: ' + msg.getFrom(),
-          'Date: ' + msg.getDate().toISOString(),
-          'Subject: ' + msg.getSubject(),
-          '',
-          'Links:',
-        ].concat(links).join('\n');
-        putFile_(token, 'data/verify/' + msg.getId() + '.txt', text, 'Relay Workday account verification');
-        msg.markRead();
+      if (!links.length) {
+        // Not marked as handled, so it is retried (and logged) until the matching is fixed.
+        console.log('  links in the email: ' + allLinks_(msg.getBody()).slice(0, 5).join(' , '));
+        continue;
       }
+      const text = [
+        'From: ' + msg.getFrom(),
+        'Date: ' + msg.getDate().toISOString(),
+        'Subject: ' + msg.getSubject(),
+        '',
+        'Links:',
+      ].concat(links).join('\n');
+      putFile_(token, 'data/verify/' + msg.getId() + '.txt', text, 'Relay Workday account verification');
+      msg.markRead();
       relayed.add(msg.getId());
     }
   }
   props.setProperty('RELAYED_VERIFY_IDS', JSON.stringify(Array.from(relayed).slice(-200)));
+}
+
+function allLinks_(html) {
+  const out = [];
+  const re = /<a\b[^>]*href\s*=\s*["']([^"']+)["']/gi;
+  let m;
+  while ((m = re.exec(html)) && out.length < 20) out.push(m[1].replace(/&amp;/g, '&').trim().slice(0, 120));
+  return out;
 }
 
 // Every distinct https link in an HTML email whose host is on myworkdayjobs.com / myworkday.com.
@@ -256,6 +269,7 @@ function markStaleCodesRead() {
 }
 
 function install() {
+  PropertiesService.getScriptProperties().deleteProperty('RELAYED_VERIFY_IDS'); // retry emails skipped by older versions
   ScriptApp.getProjectTriggers().forEach((t) => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('syncJobEmails').timeBased().everyHours(2).create();
   ScriptApp.newTrigger('relayApprovedCodes').timeBased().everyMinutes(1).create();

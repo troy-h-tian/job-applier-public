@@ -170,6 +170,11 @@ immediately. Otherwise continue until the queue is exhausted.
   and never send email.
 - If a posting states a limit on applications per candidate (e.g. "no more than 5 in 180 days"),
   read `data/applications.jsonl` and don't exceed it; prefer the candidate's best-fit roles there.
+- **Clearance questions.** If a required "held/hold a security clearance" question has a "None" /
+  "No clearance" / "Not applicable" option, pick it (the candidate has never held one). If every
+  option implies a clearance, read the job description: when it requires or implies a clearance,
+  record `skipped` ("requires a security clearance"), don't stop with `needs_human`. If it doesn't
+  mention one, record `needs_human` and quote the question.
 - **Work authorization is not citizenship.** "Authorized to work, no sponsorship needed" is also
   true of permanent residents and others. Answer questions about citizenship, permanent
   residency, export control (ITAR/EAR "U.S. person" status), or security clearance **only** from

@@ -97,9 +97,20 @@ def describe(texts, max_wait_minutes):
 def _tenant(url):
     """"https://acme.wd5.myworkdayjobs.com/en-US/External/..." -> "acme" (None if not Workday)."""
     host = (urllib.parse.urlsplit(url.strip()).hostname or "").lower()
-    if host.endswith(".myworkdayjobs.com") or host.endswith(".myworkday.com"):
+    if host.endswith((".myworkdayjobs.com", ".myworkdaysite.com", ".myworkday.com")):
         return host.split(".")[0]
     return None
+
+
+def _names(url):
+    """Everything in a Workday link that can name the employer's site: the first host label
+    ("acme" in acme.wd5.myworkdayjobs.com) and the path segments ("acme" in
+    wd5.myworkday.com/acme/...). Lowercased; empty if the link isn't on Workday."""
+    if not _tenant(url):
+        return set()
+    parts = urllib.parse.urlsplit(url.strip())
+    return {(parts.hostname or "").split(".")[0].lower()} | {
+        seg.lower() for seg in parts.path.split("/") if seg}
 
 
 def _links(text):
@@ -115,11 +126,11 @@ def wait_for_verification(application_url, max_wait_minutes):
         return []
 
     def same_site(text):
-        return any(_tenant(link) == tenant for link in _links(text))
+        return any(tenant in _names(link) for link in _links(text))
 
     def take():
         return [link for text in _take_all("data/verify", same_site) for link in _links(text)
-                if _tenant(link) == tenant]
+                if tenant in _names(link)]
 
     return _wait(max_wait_minutes, take)
 
