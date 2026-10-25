@@ -29,6 +29,7 @@ config/extra_jobs.txt     hand-picked application links
 resume/resume.md, .pdf    resume text (what Claude may say) and the file to upload: the ground truth
 resume/resume.yaml        structured copy of resume.md, used only to build tailored PDFs
 resume/transcript_*.pdf   unofficial and official transcripts, uploaded only where a form asks
+resume/writing_sample.pdf a writing sample, uploaded only where a form asks for one
 data/                     application log, reports, leads, synced emails, private run logs,
                           tailored resumes (data/tailored/) and per-batch usage (data/usage.jsonl)
 ```

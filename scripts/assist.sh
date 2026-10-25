@@ -77,6 +77,7 @@ prompt="$(cat prompts/apply.md)
 - Resume PDF to upload (absolute path): ${PWD}/resume/resume.pdf
 - Unofficial transcript PDF (absolute path): ${PWD}/resume/transcript_unofficial.pdf
 - Official transcript PDF (absolute path): ${PWD}/resume/transcript_official.pdf
+- Writing sample PDF (absolute path): ${PWD}/resume/writing_sample.pdf
 - Jobs in queue: ${list}
 - Current UTC time: $(date -u +%Y-%m-%dT%H:%MZ)"
 

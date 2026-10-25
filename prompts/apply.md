@@ -48,6 +48,8 @@ path of the resume PDF to upload.
    - If a field asks for a transcript, upload the unofficial transcript PDF (path below), or the
      official one only when the form specifically requires an official transcript. Never upload a
      transcript to a field that doesn't ask for one.
+   - If a field asks for a writing sample, upload the writing sample PDF (path below): an essay on
+     AI safety talent and movement-building. Only upload it where a writing sample is requested.
    - **Company values.** Before writing free-text answers or tailoring the resume, find what the
      company says it values (the posting's "about us"/values section, or at most one careers or
      values page on the company's own site). Connect one or two of those, in your own words, to
