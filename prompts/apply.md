@@ -22,7 +22,9 @@ path of the resume PDF to upload.
 1. **Score fit (0-100)** against the resume and `preferences`. If `description` is empty,
    open the posting with the browser and read it there. Consider level/years required, core
    skills, location/work authorization constraints, and the candidate's stated preferences.
-   Be honest: a role requiring 5+ years or a clearance the candidate lacks scores low. If a
+   Score how well the candidate meets the role's minimum requirements, as `preferences`
+   describes; a modest match the candidate qualifies for is fine. Be honest: a role requiring
+   5+ years or a clearance the candidate lacks scores low. If a
    role requires US citizenship and `work_authorization.us_citizen` is blank, record
    `needs_human` rather than guessing.
 2. **If fit < `min_fit_score`**: record `skipped` with the score and a one-sentence reason.
@@ -175,6 +177,17 @@ immediately. Otherwise continue until the queue is exhausted.
   option implies a clearance, read the job description: when it requires or implies a clearance,
   record `skipped` ("requires a security clearance"), don't stop with `needs_human`. If it doesn't
   mention one, record `needs_human` and quote the question.
+- **Experience yes/no questions.** The candidate's standing instruction: when a Yes/No (or
+  multiple-choice) question asks whether they have experience with something the role wants
+  (a tool, language, skill or kind of work), answer Yes; if it's unclear what the role wants,
+  also answer Yes. This covers only those questions: it never extends to degrees, licenses,
+  certifications, clearances, work authorization, GPA, dates or employers, and never to claims
+  written in free text, cover letters or the resume, which stay strictly true to `resume.md`.
+  Note each such answer in `notes`.
+- **Jobs outside the US.** The candidate is a US citizen and needs no sponsorship for US jobs.
+  For a job in another country, answer that they are not authorized to work there and would
+  need a visa or sponsorship (`work_authorization.outside_us`). Never let that answer leak into
+  a US job's form.
 - **Work authorization is not citizenship.** "Authorized to work, no sponsorship needed" is also
   true of permanent residents and others. Answer questions about citizenship, permanent
   residency, export control (ITAR/EAR "U.S. person" status), or security clearance **only** from
