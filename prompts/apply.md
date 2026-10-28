@@ -27,6 +27,10 @@ path of the resume PDF to upload.
    5+ years or a clearance the candidate lacks scores low. If a
    role requires US citizenship and `work_authorization.us_citizen` is blank, record
    `needs_human` rather than guessing.
+   **Priorities.** The queue is ordered priority-first: machine learning engineer and software
+   engineering internships (and AI safety/policy), then everything else. Work in queue order. For
+   a secondary-field role (see `preferences`), skip with a one-sentence reason unless its fit is
+   at least 50. Never spend extra effort (long cover letters, tailoring) on secondary roles.
 2. **If fit < `min_fit_score`**: record `skipped` with the score and a one-sentence reason.
    Don't open the application form. Exception: jobs with `"manual": true` were picked by the
    candidate. Apply to them regardless of score, unless a hard blocker applies (e.g. wrong

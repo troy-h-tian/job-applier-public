@@ -325,7 +325,12 @@ def main():
     if lead_count:
         print(f"  email leads: {lead_count} without a matching posting yet")
 
+    # Newest first, then (stable sort) priority roles (ML/software engineering, `title_priority`)
+    # ahead of everything else, and within each group email-alert leads ahead of board postings.
+    # Other fields only reach the agent once the priority roles are used up.
+    priority = cfg.get("title_priority") or []
     candidates.sort(key=lambda j: j.get("posted_at") or "", reverse=True)
+    candidates.sort(key=lambda j: (not matches_any(j["title"], priority), not j.get("lead")))
     manual = [j for j in extra_jobs(ROOT / "config" / "extra_jobs.txt") if j["id"] not in retired]
     # Hand-picked jobs go first. If discovery found the same job, keep its richer details.
     found = {c["id"]: c for c in candidates}

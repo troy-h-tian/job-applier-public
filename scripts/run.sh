@@ -44,6 +44,10 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
     echo "Stopping after $batch batch(es) (MAX_BATCHES_PER_RUN)."
     break
   fi
+  if ! python3 scripts/usage_guard.py; then
+    echo "::warning::Estimated Claude usage is near the cap (USAGE_CAP_5H_USD / USAGE_CAP_WEEK_USD); stopping this run."
+    break
+  fi
   python3 scripts/discover.py
   queued=$(python3 -c 'import json; print(len(json.load(open("data/queue.json"))))')
   if [ "$queued" = 0 ]; then
