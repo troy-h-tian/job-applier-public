@@ -401,10 +401,11 @@ def main():
             continue
         job = {**lead, "url": lead.get("url", ""), "posted_at": lead["found_at"], "description": "",
                "lead": True, "source": "email"}
-        if passes_filters(job, cfg, cutoff):
-            seen_roles.add(role)
-            candidates.append(job)
-            lead_count += 1
+        # No title/location filters: every lead is tried (the prescreen skips hard mismatches), so
+        # each one ends up applied, skipped, or listed for the candidate in data/LEADS.md.
+        seen_roles.add(role)
+        candidates.append(job)
+        lead_count += 1
     if lead_count:
         print(f"  email leads: {lead_count} without a matching posting yet")
 

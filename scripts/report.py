@@ -5,7 +5,7 @@ import json
 import sys
 import urllib.parse
 
-from common import DATA, load_applications
+from common import DATA, load_applications, normalize
 from discover import job_id_from_url
 
 
@@ -79,11 +79,14 @@ def write_leads(current):
     path = DATA / "leads.json"
     leads = json.loads(path.read_text()) if path.exists() else []
     by_id = {r["id"]: r for r in current}
-    by_url = {job_id_from_url(r["url"]): r for r in current if r.get("url", "").startswith("http")}
+    oldest_first = current[::-1]  # so the newest row for a url or role wins
+    by_url = {job_id_from_url(r["url"]): r for r in oldest_first if r.get("url", "").startswith("http")}
+    by_role = {(normalize(r["company"]), normalize(r["title"])): r for r in oldest_first}  # as discover.py dedupes
     groups = {"Not applied: do these yourself": [], "Not tried yet": [], "Applied": [],
               "Skipped (fit, eligibility or closed)": []}
     for lead in leads:
-        r = by_id.get(lead["id"]) or (by_url.get(job_id_from_url(lead["url"])) if lead.get("url") else None)
+        r = (by_id.get(lead["id"]) or (by_url.get(job_id_from_url(lead["url"])) if lead.get("url") else None)
+             or by_role.get((normalize(lead["company"]), normalize(lead["title"]))))
         if not r or r["status"] == "requeued":
             group = "Not tried yet"
         elif r["status"] == "submitted":
