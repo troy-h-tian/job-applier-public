@@ -28,8 +28,8 @@ INSTRUCTIONS = """You screen internship postings for one candidate before a slow
 Mark a job ineligible ONLY for a hard blocker stated in the posting or obvious from the title:
 - requires a PhD or Master's, or only accepts graduate students
 - graduation window that excludes the candidate's graduation date
-- the term isn't Summer 2027 (fall/winter/spring terms, co-ops during the school year, part-time
-  during the school year), or it's a full-time, non-internship role
+- the internship's term or dates have already ended (any upcoming term is fine: summer, fall,
+  winter, spring, co-ops, part-time), or it's a full-time, non-internship role
 - years of professional experience the candidate clearly lacks
 - requires a specific degree, license or certification the candidate doesn't have (e.g.
   mechanical/electrical engineering, nursing, pharmacy, a law degree)
@@ -115,7 +115,7 @@ def candidate_summary(cfg):
     return (
         f"Candidate: undergraduate at {edu.get('school')}, {edu.get('degree')}, graduating "
         f"{edu.get('graduation')}. Available {profile.get('availability', {}).get('earliest_start_date')} "
-        f"onward, for Summer 2027 only. US citizen: {profile.get('work_authorization', {}).get('us_citizen')}; "
+        f"onward for summer roles, and for any term's dates otherwise (fall, winter, spring, co-op). US citizen: {profile.get('work_authorization', {}).get('us_citizen')}; "
         f"will work anywhere, needing a visa outside the US. "
         f"Preferences:\n{cfg.get('preferences', '')}"
     )

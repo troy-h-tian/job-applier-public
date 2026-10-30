@@ -178,10 +178,7 @@ def simplify(feed_url, apply_hosts, categories):
     for j in fetch_json(feed_url):
         if not j.get("active") or not j.get("is_visible", True):
             continue
-        # Some feeds have no categories; vanshb03's mixes in off-season listings instead.
-        if categories and j.get("category") and j["category"] not in categories:
-            continue
-        if j.get("season") and "Summer" not in j["season"]:
+        if categories and j.get("category") and j["category"] not in categories:  # some feeds have none
             continue
         url = j["url"]
         host = urllib.parse.urlparse(url).netloc.lower()

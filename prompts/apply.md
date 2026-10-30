@@ -209,6 +209,9 @@ immediately. Otherwise continue until the queue is exhausted.
   certifications, clearances, work authorization, GPA, dates or employers, and never to claims
   written in free text, cover letters or the resume, which stay strictly true to `resume.md`.
   Note each such answer in `notes`.
+- **Any term.** The candidate applies to internships in any term (summer, fall, winter, spring,
+  co-ops, part-time) that hasn't ended. For term, start-date and availability questions, give the
+  posting's own term and dates; `earliest_start_date` applies to summer 2027 roles only.
 - **Jobs outside the US.** The candidate is a US citizen and needs no sponsorship for US jobs.
   For a job in another country, answer that they are not authorized to work there and would
   need a visa or sponsorship (`work_authorization.outside_us`). Never let that answer leak into
