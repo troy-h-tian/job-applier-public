@@ -19,13 +19,14 @@ const REPO = 'troy-h-tian/job-applier';
 const QUERY =
   'from:(wayup.com OR joinhandshake.com OR jobalerts-noreply@linkedin.com OR jobs-noreply@linkedin.com) newer_than:7d';
 // Newsletters that list internship openings: UCLA mailing lists (the Undergraduate Internship
-// Program and CS department newsletters, ...) and Direct Consideration. `list:` matches mail sent
-// through a UCLA mailing list, and newsletters sent through a mailing service still carry an
-// unsubscribe link, so personal emails from ucla.edu addresses aren't copied. To add another
-// newsletter, add its sender, e.g. OR from:news@example.com
+// Program and CS department newsletters, ...) and Direct Consideration. `list:` matches only mail
+// sent through a mailing list, so personal emails, application receipts and security codes
+// aren't copied. If a newsletter isn't picked up, add its sender, e.g. OR from:news@example.com
 const NEWSLETTER_QUERY =
-  '(list:ucla.edu OR (from:ucla.edu unsubscribe) OR "Direct Consideration" OR from:directconsideration) ' +
-  '(internship OR internships OR intern OR interns) newer_than:7d';
+  '(list:ucla.edu OR from:directconsideration OR "Direct Consideration") ' +
+  '(internship OR internships OR intern OR interns) ' +
+  '-subject:("security code" OR "verification code" OR "your application" OR "application is in") ' +
+  'newer_than:7d';
 const MAX_BODY_CHARS = 20000;
 const MAX_LINKS = 200;  // newsletters can list many openings
 
