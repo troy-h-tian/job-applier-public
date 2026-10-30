@@ -3,8 +3,8 @@
 An unattended internship application agent. Three times a day, GitHub Actions:
 
 1. **Discovers** new postings from company job boards (Greenhouse, Lever, Ashby and Workday
-   public APIs), the SimplifyJobs internship feed, job-alert emails (WayUp, Handshake, LinkedIn),
-   and hand-picked links, filtered by title, location and age (`scripts/discover.py`,
+   public APIs), the SimplifyJobs and vanshb03 internship feeds, the underclassmen-internships
+   program list, job-alert emails (WayUp, Handshake, LinkedIn), and hand-picked links, filtered by title, location and age (`scripts/discover.py`,
    `scripts/inbox.py`).
 2. **Screens** each posting cheaply: its description is fetched from the job board's API and
    Claude Haiku skips hard mismatches (degree level, graduation window, term, country)

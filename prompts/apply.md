@@ -119,6 +119,23 @@ employer link from the email: use it and skip to scoring. Otherwise, before scor
    it, then apply or skip. Always record with the lead's `id`, and record the employer URL you
    used as `url`.
 
+## Programs from curated lists (`"program": true`)
+
+These come from a curated list of internships, fellowships and insight programs for freshmen and
+sophomores. `company` and `title` are both the program's name from the list, and `description`
+holds the list's section, class years and note. `url` is often a landing page, not a form:
+
+1. Score fit as usual, reading the page. The class years matter: a freshman-only program doesn't
+   fit the candidate (graduating June 2029, so a sophomore in 2026-27).
+2. Find the application from the landing page: follow its own "Apply", "Register interest" or
+   similar links, staying on the organization's own site, its job board, or the form it links to
+   (Gem, Typeform, Google Forms, an ATS). If a program lists several roles, apply to the one that
+   best fits (at most one per program) and record it with the queue's `id`.
+3. Fill in as much as the form allows and submit, under the same rules as any job. An
+   interest or waitlist form counts as an application. If the application isn't open yet,
+   record `skipped` with the reason "application not open yet" and the date it opens, if shown.
+   Accounts and logins on these sites are `needs_human`, as anywhere else except Workday.
+
 ## Workday accounts
 
 Each company's Workday site has separate accounts, so expect to create a new one most times.

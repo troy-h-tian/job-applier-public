@@ -12,6 +12,7 @@ import urllib.request
 from concurrent.futures import ThreadPoolExecutor
 
 import boards
+import links
 
 from common import (
     DATA,
@@ -29,6 +30,9 @@ from common import (
 
 USER_AGENT = "Mozilla/5.0 (job-applier; personal use)"
 LEADS = DATA / "leads.json"
+SHORT_LINKS = DATA / "short_links.json"  # cache: feed short link -> where it redirects
+# Feeds whose listings point at a link shortener instead of the job board.
+SHORT_LINK_HOSTS = ("go.vansh.nyc",)
 DESCRIPTION_CHARS = 6000
 
 
@@ -56,7 +60,7 @@ def job_id_from_url(url):
     parsed = urllib.parse.urlparse(url)
     host, path = parsed.netloc.lower(), parsed.path
     if "greenhouse.io" in host:
-        m = re.search(r"/jobs/(\d+)", path) or re.search(r"gh_jid=(\d+)", parsed.query)
+        m = re.search(r"/jobs/(\d+)", path) or re.search(r"(?:gh_jid|token)=(\d+)", parsed.query)
         if m:
             return f"gh:{m.group(1)}"
     m = re.search(r"([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})", path)
@@ -170,14 +174,19 @@ def workday(site_url, search_text, max_results):
 
 
 def simplify(feed_url, apply_hosts, categories):
+    """SimplifyJobs-format listings.json (also used by vanshb03/Summer2027-Internships)."""
     for j in fetch_json(feed_url):
         if not j.get("active") or not j.get("is_visible", True):
             continue
-        if categories and j.get("category") not in categories:
+        # Some feeds have no categories; vanshb03's mixes in off-season listings instead.
+        if categories and j.get("category") and j["category"] not in categories:
+            continue
+        if j.get("season") and "Summer" not in j["season"]:
             continue
         url = j["url"]
         host = urllib.parse.urlparse(url).netloc.lower()
-        if not any(h in host for h in apply_hosts):
+        # Short links are resolved, and checked against apply_hosts, after the title filters.
+        if host not in SHORT_LINK_HOSTS and not any(h in host for h in apply_hosts):
             continue
         yield {
             "id": job_id_from_url(url),
@@ -188,6 +197,75 @@ def simplify(feed_url, apply_hosts, categories):
             "posted_at": iso_from_epoch(j["date_posted"]) if j.get("date_posted") else None,
             "description": "",  # the agent reads it from the posting page
             "sponsorship": j.get("sponsorship"),
+        }
+
+
+def resolve_short_links(jobs, apply_hosts):
+    """Swap feed short links for the job board URL they redirect to; drop non-ATS targets."""
+    def is_short(url):
+        return urllib.parse.urlparse(url).netloc.lower() in SHORT_LINK_HOSTS
+
+    if not any(is_short(j["url"]) for j in jobs):
+        return jobs
+    cache = json.loads(SHORT_LINKS.read_text()) if SHORT_LINKS.exists() else {}
+    todo = list({j["url"] for j in jobs if is_short(j["url"])} - cache.keys())
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        for short, target in zip(todo, pool.map(links.resolve, todo)):
+            if target:  # "" is a failed request: try again next run
+                cache[short] = target
+    if todo:
+        DATA.mkdir(exist_ok=True)
+        SHORT_LINKS.write_text(json.dumps(cache, indent=1, sort_keys=True))
+    out = []
+    for j in jobs:
+        if not is_short(j["url"]):
+            out.append(j)
+            continue
+        url = cache.get(j["url"], j["url"])
+        host = urllib.parse.urlparse(url).netloc.lower()
+        if is_short(url) or not any(h in host for h in apply_hosts):
+            continue
+        out.append({**j, "url": url, "id": job_id_from_url(url)})
+    return out
+
+
+def program_list(readme_url, sections):
+    """Programs from a curated README table (zapplyjobs/underclassmen-internships).
+
+    Rows look like `| [Name](url) | Status/Open Date | Year | Note |`. Only rows marked open are
+    kept: the agent can't apply to a program that hasn't opened, and a row is picked up as soon
+    as the list marks it open. The url is often a program landing page, not a form.
+    """
+    req = urllib.request.Request(readme_url, headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        text = resp.read().decode()
+    section = None
+    for line in text.splitlines():
+        if line.startswith("## "):
+            section = line[3:].strip()
+            continue
+        cells = [c.strip() for c in line.strip().strip("|").split("|")]
+        m = re.fullmatch(r"\[([^\]]+)\]\((https?://[^)\s]+)\)", cells[0]) if line.startswith("|") else None
+        if section not in sections or not m or len(cells) < 4:
+            continue
+        name, url = m.groups()
+        status, year, note = cells[1], cells[2], " ".join(cells[3:])
+        if "open" not in status.lower() and "rolling" not in status.lower() or is_blocked_site(url):
+            continue
+        job_id = job_id_from_url(url)
+        query = urllib.parse.urlparse(url).query
+        if job_id.startswith("url:") and query:  # e.g. one gem.com/form per company
+            job_id += "?" + query
+        yield {
+            "id": job_id,
+            "company": name,
+            "title": name,
+            "location": "",
+            "url": url,
+            "posted_at": None,
+            "description": f"{section} (from a curated list for freshmen and sophomores). "
+                           f"Status: {status}. Class years: {year}. {note}".strip(),
+            "program": True,
         }
 
 
@@ -232,6 +310,8 @@ def days_ago(days):
 
 def passes_filters(job, cfg, cutoff):
     title, loc = job["title"], job["location"]
+    if job.get("program"):  # names like "NASA" or "MLH Fellowship": the agent judges fit
+        return True
     if cfg.get("title_require") and not matches_any(title, cfg["title_require"]):
         return False
     if cfg.get("title_include") and not matches_any(title, cfg["title_include"]):
@@ -271,7 +351,9 @@ def main():
     apply_hosts = sources.get("apply_hosts") or ["greenhouse.io", "jobs.lever.co", "jobs.ashbyhq.com", "myworkdayjobs.com"]
     if not workday_enabled:
         apply_hosts = [h for h in apply_hosts if "myworkdayjobs.com" not in h]
-    tasks += [(f"simplify/{u.split('/')[4]}", simplify, (u, apply_hosts, sources.get("simplify_categories"))) for u in sources.get("simplify_feeds") or []]
+    tasks += [(f"simplify/{u.split('/')[3]}", simplify, (u, apply_hosts, sources.get("simplify_categories"))) for u in sources.get("simplify_feeds") or []]
+    tasks += [(f"list/{u.split('/')[3]}", program_list, (u, sources.get("program_list_sections") or []))
+              for u in sources.get("program_lists") or []]
 
     def run(task):
         name, fn, args = task
@@ -291,7 +373,7 @@ def main():
             if err:
                 print(f"  ! {name}: {err}", file=sys.stderr)
                 continue
-            kept = [j for j in jobs if passes_filters(j, cfg, cutoff)]
+            kept = resolve_short_links([j for j in jobs if passes_filters(j, cfg, cutoff)], apply_hosts)
             print(f"  {name}: {len(jobs)} postings, {len(kept)} match filters")
             for j in kept:
                 # Direct board results come first in `tasks`, so they win dedupe (they carry descriptions).
