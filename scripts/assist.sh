@@ -10,10 +10,11 @@
 #   scripts/assist.sh --max 5             # just the first 5
 #   scripts/assist.sh ashby:5353... ...   # just these job ids
 #
-#   scripts/assist.sh --my-browser [--max N]   # the email-alert jobs the agent couldn't find on the
-#                                         # employer's site (data/LEADS.md, "Not applied"), done
-#                                         # in the candidate's own running Chrome, already logged in
-#                                         # to LinkedIn, Handshake, Indeed and WayUp. Needs the
+#   scripts/assist.sh --my-browser [--max N]   # the CAPTCHA jobs above, then the email-alert jobs the
+#                                         # agent couldn't find on the employer's site (data/LEADS.md,
+#                                         # "Not applied"), in batches of 15 until none are left or
+#                                         # it's stopped, in the candidate's own running Chrome,
+#                                         # already logged in to LinkedIn, Handshake, Indeed and WayUp. Needs the
 #                                         # "Playwright Extension" in Chrome (Chrome asks to approve
 #                                         # each connection). The candidate stays at the screen for
 #                                         # CAPTCHAs, Duo and other verification.
@@ -28,7 +29,12 @@ case " $* " in *" --my-browser "*) MY_BROWSER=1 ;; esac
 case " $* " in *" --firefox "*) USE_FIREFOX=1 ;; esac
 
 git -C private pull -q --rebase
-list=$(python3 - "$@" <<'PY'
+# Jobs already handed to the agent this session, so a job that stops on a CAPTCHA again isn't
+# retried in the next batch.
+export ATTEMPTED=data/.assist_attempted
+: > "$ATTEMPTED"
+
+build_queue() { python3 - "$@" <<'PY'
 import json, re, sys
 sys.path.insert(0, "scripts")
 from common import QUEUE, load_applications
@@ -50,23 +56,26 @@ if "--max" in args:
 latest = {}
 for r in load_applications():
     latest[r["id"]] = r
-if my_browser:
-    # Email-alert leads whose employer posting wasn't found: each is a job on LinkedIn, Handshake,
-    # Indeed or WayUp. Newest first; the email's own link is used when it was kept.
+ids = args or [i for i, r in latest.items() if r["status"] == "needs_human"
+               and re.search(r"captcha|bot check|cloudflare", r["reason"] + r["notes"], re.I)]
+lead_ids = set()
+if my_browser and not args:
+    # Then email-alert leads whose employer posting wasn't found: each is a job on LinkedIn,
+    # Handshake, Indeed or WayUp. Newest first; the email's own link is used when it was kept.
     from common import DATA
     leads = {l["id"]: l for l in json.loads((DATA / "leads.json").read_text())}
-    ids = [i for i, r in sorted(latest.items(), key=lambda kv: kv[1]["at"], reverse=True)
-           if i in leads and r["status"] == "skipped" and "not found" in r["reason"].lower()]
-    for i in ids:
+    lead_ids = {i for i, r in latest.items()
+                if i in leads and r["status"] == "skipped" and "not found" in r["reason"].lower()}
+    ids += sorted(lead_ids, key=lambda i: latest[i]["at"], reverse=True)
+    for i in lead_ids:
         latest[i] = {**latest[i], "url": leads[i].get("alert_url") or "", "notes": ""}
-else:
-    ids = args or [i for i, r in latest.items() if r["status"] == "needs_human"
-                   and re.search(r"captcha|bot check|cloudflare", r["reason"] + r["notes"], re.I)]
+attempted = set(open(os.environ["ATTEMPTED"]).read().split()) if os.path.exists(os.environ["ATTEMPTED"]) else set()
+ids = [i for i in ids if i not in attempted]
 if list_only:
     for i in ids:
         r = latest[i]
         print(f"{r['at'][:10]}  {r['company']}: {r['title']} ({i})", file=sys.stderr)
-    print(f"{len(ids)} job(s) waiting on a CAPTCHA or bot check.", file=sys.stderr)
+    print(f"{len(ids)} job(s) waiting ({len(lead_ids)} of them email-alert jobs for your browser).", file=sys.stderr)
     print("list")
     sys.exit()
 queue = []
@@ -77,13 +86,28 @@ for i in ids[:max_jobs]:
     # The notes hold the answers written last time, so the agent can reuse them.
     queue.append({"id": i, "company": r["company"], "title": r["title"], "url": r["url"],
                   "description": "", "previous_attempt": r["reason"] + " " + r["notes"],
-                  **({"lead": True, "my_browser": True} if my_browser else {})})
+                  **({"lead": True, "my_browser": True} if i in lead_ids else {})})
 QUEUE.write_text(json.dumps(queue, indent=2))
+with open(os.environ["ATTEMPTED"], "a") as f:
+    f.write("".join(q["id"] + "\n" for q in queue))
 print(f"{len(queue)} job(s) queued:", ", ".join(q["company"] for q in queue), file=sys.stderr)
 print(len(queue))
 PY
-)
+}
+
+# Save results however the session ends (finished, Ctrl-C, or stopped), so it can be stopped any
+# time and started again later.
+save() {
+  python3 scripts/report.py
+  git -C private add -A data
+  git -C private commit -q -m "Assist run $(date -u +%Y-%m-%dT%H:%MZ)" || return 0
+  git -C private pull -q --rebase && git -C private push -q
+}
+
+list=$(build_queue "$@")
 [ "$list" = list ] || [ "$list" = 0 ] && exit 0
+trap 'rm -f data/.mcp-assist.json data/.secrets.env "$ATTEMPTED"; save' EXIT
+trap 'exit 130' INT TERM
 
 mkdir -p data/screenshots data/logs
 ( umask 077; printf "WORKDAY_PASSWORD='%s'\n" "${WORKDAY_PASSWORD:-}" > data/.secrets.env )
@@ -109,13 +133,14 @@ json.dump(cfg, open("data/.mcp-assist.json", "w"), indent=2)
 PY
 
 export MCP_TOOL_TIMEOUT=900000
+while :; do
 prompt="$(cat prompts/apply.md)
 
 ## Run context
 - Mode: submit, **assist mode**: the candidate is watching the browser window and will do any
   CAPTCHA, security code or account verification by hand when you ask (see the tools).
-- These jobs were tried before and stopped at a CAPTCHA or bot check. Each queue entry's
-  \`previous_attempt\` has the answers written last time: reuse them rather than rewriting.
+- Jobs without \`my_browser\` were tried before and stopped at a CAPTCHA or bot check. Each queue
+  entry's \`previous_attempt\` has the answers written last time: reuse them rather than rewriting.
 - Resume PDF to upload (absolute path): ${PWD}/resume/resume.pdf
 - Unofficial transcript PDF (absolute path): ${PWD}/resume/transcript_unofficial.pdf
 - Official transcript PDF (absolute path): ${PWD}/resume/transcript_official.pdf
@@ -139,9 +164,10 @@ claude -p "$prompt" \
   --permission-mode dontAsk \
   --allowedTools "mcp__playwright" "mcp__applier" "Read" \
   --no-session-persistence | tee -a "$log" || echo "Claude ended with an error"
-rm -f data/.mcp-assist.json data/.secrets.env
 
-python3 scripts/report.py
-git -C private add -A data
-git -C private commit -q -m "Assist run $(date -u +%Y-%m-%dT%H:%MZ)" || exit 0
-git -C private pull -q --rebase && git -C private push -q
+# One batch unless in my-browser mode; there, keep going until nothing is left (or it's stopped).
+[ "$MY_BROWSER" = 1 ] || break
+save
+list=$(build_queue "$@")
+[ "$list" = 0 ] && break
+done
