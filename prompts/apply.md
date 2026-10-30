@@ -154,8 +154,10 @@ and record `dry_run` with a note that the account step was skipped.
 - Fill the profile from `profile.yaml` and `resume.md` like any form. Accept a required terms
   checkbox; decline optional marketing, talent-community and SMS opt-ins.
 - If the site emails a **code**, use `wait_for_approved_code` (see **Verification codes**). If
-  it emails a **link** to click, record `needs_human` ("account needs email verification") unless
-  it's Workday (see below): other sites' verification links aren't relayed.
+  it emails a **link** to verify the account, call `wait_for_account_verification` with the
+  current page URL. If it returns a link, open it in a new tab, wait for the page to confirm the
+  account is verified, close that tab, then return to the application and sign in again if
+  asked. If it returns no link, record `needs_human`. Never open any other link from these emails.
 - Put "created an account on <site>" in `notes`, so the candidate knows it exists.
 
 ## Workday accounts
@@ -179,7 +181,7 @@ dry-run screenshot, and record `dry_run` with a note that the account step was s
    same email and `WORKDAY_PASSWORD`. Never use "forgot password" or any other recovery flow.
    If signing in says the account isn't verified yet, click **Resend Account Verification** (or
    similar) if offered, then handle it as in the next step.
-4. If Workday says it sent an email to verify the account, call `wait_for_workday_verification`
+4. If Workday says it sent an email to verify the account, call `wait_for_account_verification`
    with the current page URL. If it returns a link, open it in a new tab, wait for the page to
    confirm the account is verified, close that tab, then return to the application and **Sign
    In** with the profile `email` and `WORKDAY_PASSWORD`. If it returns no link, record

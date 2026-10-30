@@ -54,10 +54,10 @@ def ask_code(company, minutes):
 
 
 def ask_verification(application_url, minutes):
-    result = _dialog("Workday sent an account-verification email for the site in the browser "
+    result = _dialog("The site in the browser sent an account-verification email "
                      f"({application_url.split('/')[2]}). Open it and click its verify link, then "
                      "click Done.", "plain", minutes)
     if result == "done":
-        return ("The candidate says the account is verified. Return to the application and Sign "
-                "In with the profile email and WORKDAY_PASSWORD.")
+        return ("The candidate says the account is verified. Return to the application and sign "
+                "in with the profile email and WORKDAY_PASSWORD.")
     return "The account wasn't verified. Record needs_human and move on."
