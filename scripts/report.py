@@ -5,7 +5,7 @@ import json
 import sys
 import urllib.parse
 
-from common import DATA, load_applications, normalize
+from common import DATA, load_applications, needs_assist, normalize
 from discover import job_id_from_url
 
 
@@ -55,12 +55,15 @@ def main():
             print(table(this_run, cols))
 
     current = latest_by_id(rows)
-    needs = [r for r in current if r["status"] == "needs_human"]
+    assist = [r for r in current if needs_assist(r)]
+    needs = [r for r in current if r["status"] == "needs_human" and not needs_assist(r)]
     (DATA / "NEEDS_YOU.md").write_text(
         "# Applications that need you\n\n"
-        "The agent stopped on these (CAPTCHA, account required, or a question it couldn't answer "
-        "truthfully from your profile). Finish them by hand, or add the missing answer to "
-        "config/profile.yaml.\n\n"
+        "The agent can't do these on its own: an unusual requirement (a video, an assessment, an "
+        "emailed application) or a question it couldn't answer truthfully from your profile. "
+        "Finish them by hand, or add the missing answer to config/profile.yaml.\n\n"
+        f"_Not listed: {len(assist)} job(s) stopped on a CAPTCHA, bot check or emailed code; "
+        "`scripts/assist.sh --my-browser` works through those with you._\n\n"
         + (table(needs, cols[1:] + [("Notes", lambda r: r.get("notes", ""))]) if needs else "_Nothing right now._\n")
     )
     applied = [r for r in current if r["status"] == "submitted"]

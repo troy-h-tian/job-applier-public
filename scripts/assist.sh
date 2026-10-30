@@ -23,14 +23,16 @@
 #                                         # in it on the first run. Untested.
 set -euo pipefail
 cd "$(dirname "$0")/.."
-# Use the candidate's API key if they've saved one (kept outside the repo, never committed):
-# ~/.config/job-applier/env containing ANTHROPIC_API_KEY=sk-ant-...  Otherwise `claude` uses its login.
-if [ -f "$HOME/.config/job-applier/env" ]; then
+# Runnable from inside a Claude Code session: this script starts its own, separate agent.
+unset CLAUDECODE CLAUDE_CODE_ENTRYPOINT
+# By default `claude` uses its own login (the subscription). With USE_API_KEY=1, use the
+# ANTHROPIC_API_KEY in ~/.config/job-applier/env instead (kept outside the repo, never committed).
+if [ "${USE_API_KEY:-0}" = 1 ] && [ -f "$HOME/.config/job-applier/env" ]; then
   set -a; . "$HOME/.config/job-applier/env"; set +a
   echo "Using ANTHROPIC_API_KEY from ~/.config/job-applier/env" >&2
 else
   unset ANTHROPIC_API_KEY
-  echo "No ~/.config/job-applier/env: using the claude login (subscription)" >&2
+  echo "Using the claude login (subscription)" >&2
 fi
 export MY_BROWSER=0
 export USE_FIREFOX=0
@@ -65,8 +67,8 @@ if "--max" in args:
 latest = {}
 for r in load_applications():
     latest[r["id"]] = r
-ids = args or [i for i, r in latest.items() if r["status"] == "needs_human"
-               and re.search(r"captcha|bot check|cloudflare", r["reason"] + r["notes"], re.I)]
+from common import needs_assist
+ids = args or [i for i, r in latest.items() if needs_assist(r)]
 lead_ids = set()
 if my_browser and not args:
     # Then email-alert leads whose employer posting wasn't found: each is a job on LinkedIn,

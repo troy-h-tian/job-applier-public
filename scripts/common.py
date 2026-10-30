@@ -2,6 +2,7 @@
 
 import datetime as dt
 import json
+import re
 from pathlib import Path
 
 import yaml
@@ -69,6 +70,17 @@ def normalize(text):
 
     text = re.sub(r"\b(inc|llc|ltd|corp|corporation|co|usa|us|company|the)\b", " ", text.lower())
     return re.sub(r"[^a-z0-9]+", " ", text).strip()
+
+
+# needs_human reasons the assist session (scripts/assist.sh) handles with the candidate at the
+# screen: CAPTCHAs, bot checks, and emailed codes or account-verification links.
+ASSIST_PATTERN = re.compile(
+    r"captcha|bot check|cloudflare|(verification|validation|security|one-time) code|verif(y|ication) (email|link)|"
+    r"email verification|account (needs )?verif", re.I)
+
+
+def needs_assist(row):
+    return row["status"] == "needs_human" and bool(ASSIST_PATTERN.search(row["reason"] + " " + row.get("notes", "")))
 
 
 # Job boards whose terms forbid automated access. The agent never opens these.
