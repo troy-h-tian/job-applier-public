@@ -167,7 +167,9 @@ $( [ "$MY_BROWSER" = 1 ] && echo "- **my-browser mode**: the browser is the cand
 
 log="data/logs/$(date -u +%Y-%m-%d).log"
 echo "### $(date -u +%H:%MZ) assist" >> "$log"
-claude -p "$prompt" \
+before=$(wc -l < data/applications.jsonl)
+# caffeinate keeps the Mac from idle-sleeping while the batch runs (closing the lid still sleeps it).
+caffeinate -is claude -p "$prompt" \
   --model "${CLAUDE_MODEL:-sonnet}" \
   --mcp-config data/.mcp-assist.json --strict-mcp-config \
   --permission-mode dontAsk \
@@ -176,6 +178,12 @@ claude -p "$prompt" \
 
 # One batch unless in my-browser mode; there, keep going until nothing is left (or it's stopped).
 [ "$MY_BROWSER" = 1 ] || break
+# A batch that recorded nothing failed (no credit, no network, browser not connected): stop rather
+# than burn through the list.
+if [ "$(wc -l < data/applications.jsonl)" -eq "$before" ]; then
+  echo "That batch recorded no results, so stopping. Fix the problem above and run it again." >&2
+  break
+fi
 save
 list=$(build_queue "$@")
 [ "$list" = 0 ] && break
