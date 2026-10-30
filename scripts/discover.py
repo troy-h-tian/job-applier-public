@@ -173,7 +173,7 @@ def workday(site_url, search_text, max_results):
             break
 
 
-def simplify(feed_url, apply_hosts, categories):
+def simplify(feed_url, host_ok, categories):
     """SimplifyJobs-format listings.json (also used by vanshb03/Summer2027-Internships)."""
     for j in fetch_json(feed_url):
         if not j.get("active") or not j.get("is_visible", True):
@@ -181,9 +181,8 @@ def simplify(feed_url, apply_hosts, categories):
         if categories and j.get("category") and j["category"] not in categories:  # some feeds have none
             continue
         url = j["url"]
-        host = urllib.parse.urlparse(url).netloc.lower()
-        # Short links are resolved, and checked against apply_hosts, after the title filters.
-        if host not in SHORT_LINK_HOSTS and not any(h in host for h in apply_hosts):
+        # Short links are resolved, and checked with host_ok, after the title filters.
+        if urllib.parse.urlparse(url).netloc.lower() not in SHORT_LINK_HOSTS and not host_ok(url):
             continue
         yield {
             "id": job_id_from_url(url),
@@ -197,8 +196,8 @@ def simplify(feed_url, apply_hosts, categories):
         }
 
 
-def resolve_short_links(jobs, apply_hosts):
-    """Swap feed short links for the job board URL they redirect to; drop non-ATS targets."""
+def resolve_short_links(jobs, host_ok):
+    """Swap feed short links for the page they redirect to; drop targets host_ok rejects."""
     def is_short(url):
         return urllib.parse.urlparse(url).netloc.lower() in SHORT_LINK_HOSTS
 
@@ -219,8 +218,7 @@ def resolve_short_links(jobs, apply_hosts):
             out.append(j)
             continue
         url = cache.get(j["url"], j["url"])
-        host = urllib.parse.urlparse(url).netloc.lower()
-        if is_short(url) or not any(h in host for h in apply_hosts):
+        if is_short(url) or not host_ok(url):
             continue
         out.append({**j, "url": url, "id": job_id_from_url(url)})
     return out
@@ -345,10 +343,16 @@ def main():
          (u, sources.get("workday_search", ""), sources.get("workday_max_results", 100)))
         for u in (sources.get("workday") or []) if workday_enabled
     ]
-    apply_hosts = sources.get("apply_hosts") or ["greenhouse.io", "jobs.lever.co", "jobs.ashbyhq.com", "myworkdayjobs.com"]
-    if not workday_enabled:
-        apply_hosts = [h for h in apply_hosts if "myworkdayjobs.com" not in h]
-    tasks += [(f"simplify/{u.split('/')[3]}", simplify, (u, apply_hosts, sources.get("simplify_categories"))) for u in sources.get("simplify_feeds") or []]
+    # Sites feed postings may be on. An empty list means any site (company careers pages too).
+    apply_hosts = sources.get("apply_hosts", ["greenhouse.io", "jobs.lever.co", "jobs.ashbyhq.com", "myworkdayjobs.com"])
+
+    def host_ok(url):
+        host = urllib.parse.urlparse(url).netloc.lower()
+        if is_blocked_site(url) or (not workday_enabled and "myworkdayjobs.com" in host):
+            return False
+        return not apply_hosts or any(h in host for h in apply_hosts)
+
+    tasks += [(f"simplify/{u.split('/')[3]}", simplify, (u, host_ok, sources.get("simplify_categories"))) for u in sources.get("simplify_feeds") or []]
     tasks += [(f"list/{u.split('/')[3]}", program_list, (u, sources.get("program_list_sections") or []))
               for u in sources.get("program_lists") or []]
 
@@ -370,7 +374,7 @@ def main():
             if err:
                 print(f"  ! {name}: {err}", file=sys.stderr)
                 continue
-            kept = resolve_short_links([j for j in jobs if passes_filters(j, cfg, cutoff)], apply_hosts)
+            kept = resolve_short_links([j for j in jobs if passes_filters(j, cfg, cutoff)], host_ok)
             print(f"  {name}: {len(jobs)} postings, {len(kept)} match filters")
             for j in kept:
                 # Direct board results come first in `tasks`, so they win dedupe (they carry descriptions).

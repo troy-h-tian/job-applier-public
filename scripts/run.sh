@@ -16,7 +16,8 @@ fi
 mkdir -p data/screenshots
 
 # The browser tool types this password wherever Claude types the placeholder WORKDAY_PASSWORD,
-# and redacts it from everything Claude sees. Without it, Workday jobs are skipped.
+# and redacts it from everything Claude sees. It is used for every site's candidate account, not
+# just Workday. Without it, Workday jobs are skipped.
 if [[ "${WORKDAY_PASSWORD:-}" == *"'"* ]]; then
   echo "::error::WORKDAY_PASSWORD must not contain a single quote (')."
   exit 1

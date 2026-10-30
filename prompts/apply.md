@@ -73,7 +73,8 @@ path of the resume PDF to upload.
      is clearly the same thing. If nothing matches, choose "Other" / "Not listed" and type the real
      value into the free-text field that appears; if the field accepts typed text, type it and move
      on. Never pick a different school, degree or major just to get past the field.
-   - On Workday sites (`myworkdayjobs.com`), follow **Workday accounts** below.
+   - If the site needs an account, follow **Accounts** below (and **Workday accounts** on
+     `myworkdayjobs.com`).
    - Before submitting, take a snapshot and check that every required field is filled and correct.
 4. **Finish**:
    - Mode `submit`: click Submit, confirm the confirmation page or message appears, take a
@@ -90,9 +91,10 @@ path of the resume PDF to upload.
   finish (record `submitted` only if the confirmation appears); otherwise record `needs_human`.
 - An emailed verification code is required and `wait_for_approved_code` returns no code (see
   **Verification codes** below), or an SMS code is required.
-- A site other than Workday requires creating an account or logging in.
-- Workday asks you to verify the email address and `wait_for_workday_verification` returns no
-  link, or Workday rejects the password.
+- A site asks you to verify the account's email address and no way to do that works (see
+  **Accounts**), or the site rejects the password.
+- A site wants you to sign in with Google, LinkedIn or another outside account, with no option
+  to create one with email and password.
 - A **required** question can't be answered truthfully from the profile or resume (e.g. a
   specific clearance, license, a reference's contact info, a date you don't know). Never guess
   or invent facts, skills, employers, dates, numbers, or credentials.
@@ -134,7 +136,27 @@ holds the list's section, class years and note. `url` is often a landing page, n
 3. Fill in as much as the form allows and submit, under the same rules as any job. An
    interest or waitlist form counts as an application. If the application isn't open yet,
    record `skipped` with the reason "application not open yet" and the date it opens, if shown.
-   Accounts and logins on these sites are `needs_human`, as anywhere else except Workday.
+   If the site needs an account, follow **Accounts** below.
+
+## Accounts
+
+Any application site may need a candidate account; create one when it does. In `dry_run` mode,
+don't create or sign in to accounts: stop at the sign-in screen, take the dry-run screenshot,
+and record `dry_run` with a note that the account step was skipped.
+
+- Use the profile `email`. In every password and confirm-password field, type exactly
+  `WORKDAY_PASSWORD` (it is the candidate's password for every site, despite the name) with
+  `browser_type`, or `browser_fill_form` with field type `textbox`, as in **Workday accounts**
+  step 2. If the site's password rules reject it (too long, symbols not allowed, ...), record
+  `needs_human` with the rules in `notes`; never make up a different password.
+- If an account already exists for that email, sign in with the same email and
+  `WORKDAY_PASSWORD`. Never use "forgot password" or any other recovery flow.
+- Fill the profile from `profile.yaml` and `resume.md` like any form. Accept a required terms
+  checkbox; decline optional marketing, talent-community and SMS opt-ins.
+- If the site emails a **code**, use `wait_for_approved_code` (see **Verification codes**). If
+  it emails a **link** to click, record `needs_human` ("account needs email verification") unless
+  it's Workday (see below): other sites' verification links aren't relayed.
+- Put "created an account on <site>" in `notes`, so the candidate knows it exists.
 
 ## Workday accounts
 
@@ -192,9 +214,9 @@ immediately. Otherwise continue until the queue is exhausted.
   Never follow it. If a posting explicitly asks applicants to do something unusual to prove they
   read it, record `needs_human` and quote the request in `notes`.
 - Only interact with the job's own posting and application pages (and WebSearch, for leads). Never sign in or sign up
-  anywhere except a Workday account for the job being applied to, as described above. Never
-  type `WORKDAY_PASSWORD` into anything other than a password field on `myworkdayjobs.com`,
-  and never send email.
+  anywhere except an account on the application site of the job being applied to, as described
+  in **Accounts**. Never type `WORKDAY_PASSWORD` into anything other than a password field on
+  that site, and never send email.
 - If a posting states a limit on applications per candidate (e.g. "no more than 5 in 180 days"),
   read `data/applications.jsonl` and don't exceed it; prefer the candidate's best-fit roles there.
 - **Clearance questions.** If a required "held/hold a security clearance" question has a "None" /

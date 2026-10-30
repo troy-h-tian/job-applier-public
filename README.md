@@ -46,8 +46,9 @@ days without activity.
 2. In this repo's **Settings → Secrets and variables → Actions**, add:
    - `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) or `ANTHROPIC_API_KEY`.
    - `DATA_REPO_TOKEN`: a fine-grained token with **Contents: Read and write** on the private repo.
-   - `WORKDAY_PASSWORD` (optional): used for every Workday account the agent creates. 8+
-     characters with upper, lower, number and symbol; no single quotes. Claude never sees it:
+   - `WORKDAY_PASSWORD` (optional): used for every candidate account the agent creates, on
+     Workday and any other application site. 8+ characters with upper, lower, number and
+     symbol; no single quotes. Claude never sees it:
      the browser tool fills it in.
 3. Set `DATA_REPO` in `.github/workflows/apply.yml` to the private repo's name.
 4. Optional repository **variables**: `CLAUDE_MODEL` (default `sonnet`), `MAX_BATCHES_PER_RUN`
