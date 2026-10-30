@@ -234,23 +234,33 @@ function allLinks_(msg) {
 // other next step is left unread for you. (Codes: see markStaleCodesRead below.)
 
 const RECEIPT_QUERY =
-  'is:unread in:inbox newer_than:2d ("thank you for applying" OR "thanks for applying" OR ' +
-  '"thank you for your application" OR "thanks for your application" OR ' +
-  '"we received your application" OR "we have received your application" OR ' +
-  '"application received" OR "application submitted" OR "your application to" OR ' +
-  '"thank you for your interest")';
+  'is:unread in:inbox newer_than:7d (' +
+  'subject:("application is in" OR "application received" OR "application submitted" OR ' +
+  '"application confirmation" OR "application confirmed" OR "thanks for applying" OR ' +
+  '"thank you for applying" OR "thank you for your application" OR "thanks for your application" OR ' +
+  '"thank you for your interest" OR "received your application" OR "we got your application" OR ' +
+  '"your application to" OR "your application for" OR "your application was" OR "you applied") OR ' +
+  '"thank you for applying" OR "thanks for applying" OR "thank you for your application" OR ' +
+  '"thanks for your application" OR "we received your application" OR "we have received your application" OR ' +
+  '"we\'ve received your application" OR "your application has been received" OR "application received")';
+// Only a clear next step keeps a receipt unread. Boilerplate that merely mentions "interview",
+// "next steps" or "offer" ("if selected, we'll schedule an interview") doesn't count.
 const NEXT_STEP = new RegExp(
-  'interview|assessment|coding challenge|online test|hackerrank|codility|codesignal|schedule|' +
-  'availability|phone screen|invit(e|ation)|next steps?|offer|congratulations|' +
-  'verification code|security code|verify your|one-time|action required', 'i');
+  'invit(e|ation) (you )?to|we.d like to (interview|schedule|speak|chat|invite)|schedule (a|an|your) |' +
+  'select a time|book a (time|call|slot)|assessment|coding challenge|online test|hackerrank|codility|' +
+  'codesignal|congratulations|offer (letter|of employment)|action required|complete (the|your|this) (survey|questionnaire|task)', 'i');
+const SUBJECT_RECEIPT = /appl(ication|ying|ied)|thank you for your interest/i;
 
 function markReceiptsRead() {
-  for (const thread of GmailApp.search(RECEIPT_QUERY, 0, 50)) {
+  for (const thread of GmailApp.search(RECEIPT_QUERY, 0, 100)) {
     for (const msg of thread.getMessages()) {
       if (!msg.isUnread()) continue;
-      const text = msg.getSubject() + ' ' + msg.getPlainBody().slice(0, 3000);
-      if (!/(thank|thanks)[^.]{0,30}appl|received your application|application (received|submitted)/i
-          .test(text) || NEXT_STEP.test(text)) continue;
+      const subject = msg.getSubject();
+      const body = msg.getPlainBody().slice(0, 1500);
+      // A receipt: the subject says so, or the body opens with thanks for applying.
+      const isReceipt = SUBJECT_RECEIPT.test(subject) ||
+        /(thank|thanks)[^.]{0,30}appl|received your application|application (received|submitted)/i.test(body.slice(0, 600));
+      if (!isReceipt || NEXT_STEP.test(subject + ' ' + body)) continue;
       msg.markRead();
     }
   }
