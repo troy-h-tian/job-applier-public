@@ -23,6 +23,15 @@
 #                                         # in it on the first run. Untested.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# Use the candidate's API key if they've saved one (kept outside the repo, never committed):
+# ~/.config/job-applier/env containing ANTHROPIC_API_KEY=sk-ant-...  Otherwise `claude` uses its login.
+if [ -f "$HOME/.config/job-applier/env" ]; then
+  set -a; . "$HOME/.config/job-applier/env"; set +a
+  echo "Using ANTHROPIC_API_KEY from ~/.config/job-applier/env" >&2
+else
+  unset ANTHROPIC_API_KEY
+  echo "No ~/.config/job-applier/env: using the claude login (subscription)" >&2
+fi
 export MY_BROWSER=0
 export USE_FIREFOX=0
 case " $* " in *" --my-browser "*) MY_BROWSER=1 ;; esac
