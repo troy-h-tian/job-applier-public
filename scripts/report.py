@@ -1,8 +1,12 @@
-"""Print a markdown summary of the latest run and refresh data/NEEDS_YOU.md and data/APPLIED.md."""
+"""Print a markdown summary of the latest run and refresh data/NEEDS_YOU.md, data/APPLIED.md and
+data/LEADS.md."""
 
+import json
 import sys
+import urllib.parse
 
 from common import DATA, load_applications
+from discover import job_id_from_url
 
 
 def cell(text):
@@ -64,8 +68,58 @@ def main():
         f"# Submitted applications ({len(applied)})\n\n"
         + (table(applied, [("Date", lambda r: r["at"][:10])] + cols[1:]) if applied else "_None yet._\n")
     )
+    write_leads(current)
     if needs:
         print(f"\n{len(needs)} application(s) waiting on you: see data/NEEDS_YOU.md in the private repo")
+
+
+def write_leads(current):
+    """Every job from the alert emails, with what became of it, so the ones the agent can't
+    apply to (LinkedIn Easy Apply, Handshake-only, ...) can be done by hand."""
+    path = DATA / "leads.json"
+    leads = json.loads(path.read_text()) if path.exists() else []
+    by_id = {r["id"]: r for r in current}
+    by_url = {job_id_from_url(r["url"]): r for r in current if r.get("url", "").startswith("http")}
+    groups = {"Not applied: do these yourself": [], "Not tried yet": [], "Applied": [],
+              "Skipped (fit, eligibility or closed)": []}
+    for lead in leads:
+        r = by_id.get(lead["id"]) or (by_url.get(job_id_from_url(lead["url"])) if lead.get("url") else None)
+        if not r or r["status"] == "requeued":
+            group = "Not tried yet"
+        elif r["status"] == "submitted":
+            group = "Applied"
+        elif r["status"] == "needs_human" or "not found" in r.get("reason", "").lower():
+            group = "Not applied: do these yourself"
+        else:
+            group = "Skipped (fit, eligibility or closed)"
+        groups[group].append((lead, r))
+
+    def links_cell(lead):
+        out = []
+        if lead.get("url"):
+            out.append(f"[employer]({lead['url']})")
+        if lead.get("alert_url"):
+            out.append(f"[from email]({lead['alert_url']})")
+        q = urllib.parse.quote_plus(f"{lead['company']} {lead['title']}")
+        out.append(f"[LinkedIn search](https://www.linkedin.com/jobs/search/?keywords={q})")
+        return " · ".join(out)
+
+    cols = [
+        ("Found", lambda x: x[0]["found_at"][:10]),
+        ("Company", lambda x: x[0]["company"]),
+        ("Role", lambda x: x[0]["title"]),
+        ("Location", lambda x: x[0].get("location", "")),
+        ("Links", lambda x: links_cell(x[0])),
+        ("Outcome", lambda x: f"{x[1]['status']}: {x[1]['reason']}" if x[1] else ""),
+    ]
+    text = (f"# Every job from your alert emails ({len(leads)})\n\n"
+            "LinkedIn, Handshake, WayUp and Indeed alerts. The agent applies on the employer's own "
+            "site when it can find the job there; the first section is the ones it couldn't, to "
+            "do by hand. The agent never opens these links.\n")
+    for name, items in groups.items():
+        items.sort(key=lambda x: x[0]["found_at"], reverse=True)
+        text += f"\n## {name} ({len(items)})\n\n" + (table(items, cols) if items else "_None._\n")
+    (DATA / "LEADS.md").write_text(text)
 
 
 if __name__ == "__main__":

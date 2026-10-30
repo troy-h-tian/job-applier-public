@@ -87,12 +87,14 @@ def main():
                 continue
             known.add(lid)
             # Follow click trackers to the employer's page; links ending on an alert site are dropped.
-            url = j.get("url", "").strip()
-            url = links.resolve(url) if url.startswith("http") else ""
+            # The email's own link is kept (never opened) for data/LEADS.md, for the candidate.
+            alert_url = j.get("url", "").strip()
+            url = links.resolve(alert_url) if alert_url.startswith("http") else ""
             if url and is_blocked_site(url):
                 url = ""
             leads.append({"id": lid, "found_at": now, "company": company, "title": title,
-                          "location": j["location"].strip(), "url": url})
+                          "location": j["location"].strip(), "url": url,
+                          "alert_url": alert_url if alert_url.startswith("http") else ""})
             added += 1
         for f in batch:
             f.unlink()
