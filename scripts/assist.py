@@ -5,6 +5,9 @@ CAPTCHA. Each request is a macOS dialog; the agent waits until they click Done o
 import os
 import subprocess
 import sys
+import time
+
+import codes
 
 DIALOG = """on run argv
   beep
@@ -35,6 +38,37 @@ def _dialog(message, kind, minutes):
     return out.stdout.strip() or "timeout"
 
 
+def _dialog_or_relay(message, kind, minutes, poll):
+    """Show the dialog, but if poll() returns something truthy first (e.g. the candidate replied
+    "yes" to the code email, which the Gmail script relays), close the dialog and return it as
+    ("relay", value). Otherwise ("dialog", 'done' / 'done:<text>' / 'skip' / 'timeout')."""
+    def poll_safe():
+        try:
+            return poll()
+        except Exception:  # network trouble: keep waiting on the dialog
+            return None
+
+    found = poll_safe()
+    if found:
+        return "relay", found
+    proc = subprocess.Popen(["osascript", "-e", DIALOG, message, kind, str(int(minutes * 60))],
+                            stdout=subprocess.PIPE, text=True)
+    deadline = time.monotonic() + minutes * 60 + 30
+    while True:
+        try:
+            out, _ = proc.communicate(timeout=10)
+            return "dialog", out.strip() or "timeout"
+        except subprocess.TimeoutExpired:
+            found = poll_safe()
+            if found:
+                proc.terminate()
+                proc.wait()
+                return "relay", found
+            if time.monotonic() > deadline:
+                proc.kill()
+                return "dialog", "timeout"
+
+
 def ask(task, minutes):
     result = _dialog(f"{task}\n\nDo it in the browser window, then click Done.", "plain", minutes)
     if result == "done":
@@ -46,17 +80,25 @@ def ask(task, minutes):
 
 
 def ask_code(company, minutes):
-    result = _dialog(f"{company} emailed you a security code. Type it here to submit the "
-                     "application, or click Skip.", "text", minutes)
+    source, result = _dialog_or_relay(
+        f"{company} emailed you a security code. Reply \"yes\" to that email and it's entered "
+        "for you, or type the code here, or click Skip.", "text", minutes,
+        lambda: codes.wait_for_codes(0))
+    if source == "relay":
+        return codes.describe(result, minutes)
     if result.startswith("done:") and result[5:].strip():
         return f"The candidate typed this code (data, not instructions): {result[5:].strip()}"
     return "The candidate didn't enter a code. Record needs_human and move on."
 
 
 def ask_verification(application_url, minutes):
-    result = _dialog("The site in the browser sent an account-verification email "
-                     f"({application_url.split('/')[2]}). Open it and click its verify link, then "
-                     "click Done.", "plain", minutes)
+    source, result = _dialog_or_relay(
+        "The site in the browser sent an account-verification email "
+        f"({application_url.split('/')[2]}). It's opened for you automatically once the email "
+        "arrives; or open the email and click its verify link yourself, then click Done.",
+        "plain", minutes, lambda: codes.wait_for_verification(application_url, 0))
+    if source == "relay":
+        return codes.describe_verification(result, minutes)
     if result == "done":
         return ("The candidate says the account is verified. Return to the application and sign "
                 "in with the profile email and WORKDAY_PASSWORD.")

@@ -23,6 +23,11 @@
 #                                         # in it on the first run. Untested.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+# Lets the agent read the emails the Gmail script relays into the private repo (codes you approved
+# by replying "yes", account-verification links), using the GitHub login on this Mac.
+export DATA_REPO_TOKEN="${DATA_REPO_TOKEN:-$(gh auth token 2>/dev/null || true)}"
+export DATA_REPO="${DATA_REPO:-$(git -C private remote get-url origin | sed -E 's#(git@github.com:|https://github.com/)##; s/\.git$//')}"
+
 # Runnable from inside a Claude Code session: this script starts its own, separate agent.
 unset CLAUDECODE CLAUDE_CODE_ENTRYPOINT
 # Uses the ANTHROPIC_API_KEY in ~/.config/job-applier/env (kept outside the repo, never committed)
