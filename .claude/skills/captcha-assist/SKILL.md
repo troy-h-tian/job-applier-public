@@ -38,7 +38,8 @@ this session.** The candidate does that step; the script's own agent does everyt
   requirements.txt`).
 - The Playwright Extension must be installed in Chrome, with "Allow access to file URLs" turned
   on (chrome://extensions → Details), or resume uploads fail.
-- By default it uses the `claude` login (subscription). `USE_API_KEY=1 scripts/assist.sh ...`
-  uses the key in `~/.config/job-applier/env` instead.
+- It uses the API key in `~/.config/job-applier/env` when that file exists (the account needs
+  credit; "Credit balance is too low" means it doesn't). `USE_API_KEY=0 scripts/assist.sh ...`
+  uses the `claude` login (subscription) instead.
 - If `git pull` fails in `private/` because of local changes, show the user `git -C private
   status` rather than discarding anything.

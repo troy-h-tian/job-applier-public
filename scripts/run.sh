@@ -12,8 +12,8 @@ fi
 # Empty secrets arrive as empty strings; unset them so Claude Code picks whichever is real.
 [ -z "${ANTHROPIC_API_KEY:-}" ] && unset ANTHROPIC_API_KEY
 [ -z "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && unset CLAUDE_CODE_OAUTH_TOKEN
-# With both set, use the subscription token (the API key is the fallback).
-[ -n "${CLAUDE_CODE_OAUTH_TOKEN:-}" ] && unset ANTHROPIC_API_KEY
+# With both set, use the API key (the subscription token is the fallback).
+[ -n "${ANTHROPIC_API_KEY:-}" ] && unset CLAUDE_CODE_OAUTH_TOKEN
 
 mkdir -p data/screenshots
 

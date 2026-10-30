@@ -25,9 +25,9 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 # Runnable from inside a Claude Code session: this script starts its own, separate agent.
 unset CLAUDECODE CLAUDE_CODE_ENTRYPOINT
-# By default `claude` uses its own login (the subscription). With USE_API_KEY=1, use the
-# ANTHROPIC_API_KEY in ~/.config/job-applier/env instead (kept outside the repo, never committed).
-if [ "${USE_API_KEY:-0}" = 1 ] && [ -f "$HOME/.config/job-applier/env" ]; then
+# Uses the ANTHROPIC_API_KEY in ~/.config/job-applier/env (kept outside the repo, never committed)
+# when that file exists; otherwise, or with USE_API_KEY=0, `claude` uses its own login.
+if [ "${USE_API_KEY:-1}" = 1 ] && [ -f "$HOME/.config/job-applier/env" ]; then
   set -a; . "$HOME/.config/job-applier/env"; set +a
   echo "Using ANTHROPIC_API_KEY from ~/.config/job-applier/env" >&2
 else
