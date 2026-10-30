@@ -1,6 +1,7 @@
-// Google Apps Script: copies job-alert emails (WayUp, Handshake, LinkedIn) from your Gmail
-// into data/inbox/ of the job-applier repo, where the next run turns them into job leads.
-// Each email it copies is marked as read. It never visits the job sites themselves.
+// Google Apps Script: copies job-alert emails (WayUp, Handshake, LinkedIn) and internship
+// newsletters (UCLA mailing lists, Direct Consideration) from your Gmail into data/inbox/ of the
+// job-applier repo, where the next run turns them into job leads. Alert emails it copies are
+// marked as read; newsletters are left as they are. It never visits the job sites themselves.
 //
 // Setup (once, ~5 minutes), in the Google account that receives the alerts:
 //   1. script.google.com → New project → paste this file over the default code → Save.
@@ -17,7 +18,16 @@
 const REPO = 'troy-h-tian/job-applier';
 const QUERY =
   'from:(wayup.com OR joinhandshake.com OR jobalerts-noreply@linkedin.com OR jobs-noreply@linkedin.com) newer_than:7d';
+// Newsletters that list internship openings: UCLA mailing lists (the Undergraduate Internship
+// Program and CS department newsletters, ...) and Direct Consideration. `list:` matches mail sent
+// through a UCLA mailing list, and newsletters sent through a mailing service still carry an
+// unsubscribe link, so personal emails from ucla.edu addresses aren't copied. To add another
+// newsletter, add its sender, e.g. OR from:news@example.com
+const NEWSLETTER_QUERY =
+  '(list:ucla.edu OR (from:ucla.edu unsubscribe) OR "Direct Consideration" OR from:directconsideration) ' +
+  '(internship OR internships OR intern OR interns) newer_than:7d';
 const MAX_BODY_CHARS = 20000;
+const MAX_LINKS = 200;  // newsletters can list many openings
 
 function syncJobEmails() {
   const props = PropertiesService.getScriptProperties();
@@ -29,7 +39,8 @@ function syncJobEmails() {
   const synced = new Set(JSON.parse(props.getProperty('SYNCED_IDS') || '[]'));
   let added = 0;
 
-  for (const thread of GmailApp.search(QUERY, 0, 100)) {
+  const searches = [[QUERY, true], [NEWSLETTER_QUERY, false]];  // [query, mark copied emails read]
+  for (const [query, markRead] of searches) for (const thread of GmailApp.search(query, 0, 100)) {
     for (const msg of thread.getMessages()) {
       const id = msg.getId();
       if (synced.has(id)) continue;
@@ -58,7 +69,7 @@ function syncJobEmails() {
       const code = res.getResponseCode();
       // 422 means the file already exists, i.e. it was synced before.
       if (code >= 300 && code !== 422) throw new Error('GitHub API ' + code + ': ' + res.getContentText());
-      msg.markRead();
+      if (markRead) msg.markRead();
       synced.add(id);
       added++;
     }
@@ -74,7 +85,7 @@ function links_(html) {
   const seen = new Set();
   const re = /<a\b[^>]*href\s*=\s*["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi;
   let m;
-  while ((m = re.exec(html)) && out.length < 80) {
+  while ((m = re.exec(html)) && out.length < MAX_LINKS) {
     const url = m[1].replace(/&amp;/g, '&').trim();
     const text = m[2].replace(/<[^>]+>/g, ' ').replace(/&nbsp;|&#160;/g, ' ').replace(/\s+/g, ' ').trim();
     if (!/^https?:/i.test(url) || seen.has(url)) continue;

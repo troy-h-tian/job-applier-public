@@ -116,7 +116,7 @@ def write_leads(current):
         ("Outcome", lambda x: f"{x[1]['status']}: {x[1]['reason']}" if x[1] else ""),
     ]
     text = (f"# Every job from your alert emails ({len(leads)})\n\n"
-            "LinkedIn, Handshake, WayUp and Indeed alerts. The agent applies on the employer's own "
+            "LinkedIn, Handshake, WayUp and Indeed alerts, and internship newsletters. The agent applies on the employer's own "
             "site when it can find the job there; the first section is the ones it couldn't, to "
             "do by hand. The agent never opens these links.\n")
     for name, items in groups.items():

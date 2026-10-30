@@ -1,4 +1,5 @@
-"""Turn job-alert emails in data/inbox/ (synced by integrations/gmail_to_repo.gs) into leads
+"""Turn job-alert emails and internship newsletters in data/inbox/ (synced by
+integrations/gmail_to_repo.gs) into leads
 in data/leads.json. Claude Haiku reads the emails; nothing here touches the job sites."""
 
 import datetime as dt
@@ -17,8 +18,8 @@ LEADS = DATA / "leads.json"
 BATCH = 5
 CHARS_PER_EMAIL = 15000
 
-INSTRUCTIONS = """The input contains job-alert emails separated by =====. List every specific job
-posting they advertise: the hiring company (the employer, not the job site that sent the email),
+INSTRUCTIONS = """The input contains job-alert emails and internship newsletters separated by
+=====. List every specific job, internship, fellowship or program opening they advertise: the hiring company (the employer, not the job site that sent the email),
 the job title exactly as written, the location (empty string if not given), and the URL the
 email gives for that job (empty string if none). The "Links:" section at the end of each email
 lists every link as "text -> url"; use the one whose text names that job. Copy URLs exactly;
@@ -45,6 +46,16 @@ SCHEMA = {
     },
     "required": ["jobs"],
 }
+
+
+def clip(text):
+    """Shorten an email to CHARS_PER_EMAIL, keeping its "Links:" list (long newsletters would
+    otherwise lose every link)."""
+    body, sep, links = text.partition("\nLinks:\n")
+    if len(text) <= CHARS_PER_EMAIL or not sep:
+        return text[:CHARS_PER_EMAIL]
+    links = links[: CHARS_PER_EMAIL // 2]
+    return body[: CHARS_PER_EMAIL - len(links)] + sep + links
 
 
 def lead_id(company, title):
@@ -74,7 +85,7 @@ def main():
     for i in range(0, len(files), BATCH):
         batch = files[i : i + BATCH]
         try:
-            jobs = extract([f.read_text(errors="replace")[:CHARS_PER_EMAIL] for f in batch])
+            jobs = extract([clip(f.read_text(errors="replace")) for f in batch])
         except (RuntimeError, subprocess.TimeoutExpired, KeyError, ValueError) as e:
             print(f"  ! couldn't read {len(batch)} email(s), will retry next run: {e}", file=sys.stderr)
             continue
