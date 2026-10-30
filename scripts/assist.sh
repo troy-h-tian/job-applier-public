@@ -12,19 +12,20 @@
 #
 #   scripts/assist.sh --my-browser [--max N]   # the email-alert jobs the agent couldn't find on the
 #                                         # employer's site (data/LEADS.md, "Not applied"), done
-#                                         # in a Firefox window with a saved profile
-#                                         # (~/.job-applier-firefox) where the candidate has logged
-#                                         # in to LinkedIn, Handshake, Indeed and WayUp, and stays
-#                                         # at the screen for CAPTCHAs, Duo and other verification.
-#                                         # First run: log in to those sites in the window that opens.
-#   scripts/assist.sh --my-browser --chrome    # use the running Chrome instead (needs the "Playwright
-#                                         # Extension" in Chrome; Chrome asks to approve each connection)
+#                                         # in the candidate's own running Chrome, already logged in
+#                                         # to LinkedIn, Handshake, Indeed and WayUp. Needs the
+#                                         # "Playwright Extension" in Chrome (Chrome asks to approve
+#                                         # each connection). The candidate stays at the screen for
+#                                         # CAPTCHAs, Duo and other verification.
+#   scripts/assist.sh --my-browser --firefox   # a separate Firefox window with a saved profile
+#                                         # (~/.job-applier-firefox) instead; log in to those sites
+#                                         # in it on the first run. Untested.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 export MY_BROWSER=0
-export USE_CHROME=0
+export USE_FIREFOX=0
 case " $* " in *" --my-browser "*) MY_BROWSER=1 ;; esac
-case " $* " in *" --chrome "*) USE_CHROME=1 ;; esac
+case " $* " in *" --firefox "*) USE_FIREFOX=1 ;; esac
 
 git -C private pull -q --rebase
 list=$(python3 - "$@" <<'PY'
@@ -35,7 +36,7 @@ from common import QUEUE, load_applications
 import os
 args, max_jobs, list_only = sys.argv[1:], 15, False
 my_browser = os.environ.get("MY_BROWSER") == "1"
-for flag in ("--my-browser", "--chrome"):
+for flag in ("--my-browser", "--firefox"):
     if flag in args:
         args.remove(flag)
 if "--list" in args:
@@ -98,11 +99,11 @@ if os.environ.get("MY_BROWSER") == "1":
     for flag in ("--isolated", "--viewport-size"):
         i = args.index(flag)
         del args[i:i + (2 if flag == "--viewport-size" else 1)]
-    if os.environ.get("USE_CHROME") == "1":
-        args.append("--extension")
-    else:
+    if os.environ.get("USE_FIREFOX") == "1":
         # Playwright's own Firefox build, with a profile kept outside the repo so logins persist.
         args += ["--browser", "firefox", "--user-data-dir", os.path.expanduser("~/.job-applier-firefox")]
+    else:
+        args.append("--extension")
 cfg["mcpServers"]["applier"]["env"]["APPLIER_ASSIST"] = "1"
 json.dump(cfg, open("data/.mcp-assist.json", "w"), indent=2)
 PY
@@ -119,8 +120,8 @@ prompt="$(cat prompts/apply.md)
 - Unofficial transcript PDF (absolute path): ${PWD}/resume/transcript_unofficial.pdf
 - Official transcript PDF (absolute path): ${PWD}/resume/transcript_official.pdf
 - Writing sample PDF (absolute path): ${PWD}/resume/writing_sample.pdf
-$( [ "$MY_BROWSER" = 1 ] && echo "- **my-browser mode**: the browser is a window the candidate logged in to LinkedIn, Handshake,
-  Indeed and WayUp in earlier, and they are at the screen. For these jobs (\`my_browser\`) you MAY
+$( [ "$MY_BROWSER" = 1 ] && echo "- **my-browser mode**: the browser is the candidate's own, already logged in to LinkedIn,
+  Handshake, Indeed and WayUp, and they are at the screen. For these jobs (\`my_browser\`) you MAY
   open those sites, but only to find and apply to the job in the queue: the email link in \`url\` if
   there is one, otherwise a search for the company and title. Use the site's own apply flow (Easy
   Apply, Handshake apply) or follow its link to the employer's page. Work at a human pace, one job
