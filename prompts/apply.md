@@ -115,7 +115,9 @@ employer link from the email: use it and skip to scoring. Otherwise, before scor
    `<company> <title> greenhouse OR lever OR ashby OR myworkdayjobs`. Use at most 4 searches.
 2. Only accept a result on the company's own careers site or on Greenhouse, Lever, Ashby or
    Workday. **Never open wayup.com, joinhandshake.com, linkedin.com, indeed.com, or any other
-   job board or aggregator**; their terms forbid automated access.
+   job board or aggregator**; their terms forbid automated access. The one exception is
+   **my-browser mode**, when the run context says the candidate is at the screen in their own
+   browser: then it describes what you may open.
 3. If you can't find an open posting for that company and title, record `skipped` with the
    reason "employer posting not found". If you find it, continue as for any other job: score
    it, then apply or skip. Always record with the lead's `id`, and record the employer URL you
