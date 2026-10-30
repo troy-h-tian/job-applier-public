@@ -44,7 +44,8 @@ days without activity.
 
 1. Create the private data repo with the layout above.
 2. In this repo's **Settings → Secrets and variables → Actions**, add:
-   - `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) or `ANTHROPIC_API_KEY`.
+   - `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) or `ANTHROPIC_API_KEY`. If both are
+     set, the API key is used.
    - `DATA_REPO_TOKEN`: a fine-grained token with **Contents: Read and write** on the private repo.
    - `WORKDAY_PASSWORD` (optional): used for every candidate account the agent creates, on
      Workday and any other application site. 8+ characters with upper, lower, number and
@@ -52,7 +53,8 @@ days without activity.
      the browser tool fills it in.
 3. Set `DATA_REPO` in `.github/workflows/apply.yml` to the private repo's name.
 4. Optional repository **variables**: `CLAUDE_MODEL` (default `sonnet`), `MAX_BATCHES_PER_RUN`
-   (default `6`; `0` = no cap, see **Usage** below), `MAX_BUDGET_USD` (spending cap per batch of
+   (default `0` = no cap, see **Usage** below), `USAGE_CAP_5H_USD` / `USAGE_CAP_WEEK_USD`
+   (estimated usage caps, default `0` = off), `MAX_BUDGET_USD` (spending cap per batch of
    15 jobs, API key only; none by default).
 5. Run it once from **Actions → Job applier → Run workflow**.
 
@@ -127,12 +129,14 @@ are saved under `data/tailored/<job id>/`, so you can see exactly what was sent.
 
 ## Usage
 
-Runs use your Claude subscription (`CLAUDE_CODE_OAUTH_TOKEN`), which allows a certain amount per
-5-hour window plus a weekly cap, shared with your own use of Claude. The schedule is 8:17am,
+Runs use `ANTHROPIC_API_KEY` (billed per token) when it's set, otherwise your Claude subscription
+(`CLAUDE_CODE_OAUTH_TOKEN`), which allows a certain amount per 5-hour window plus a weekly cap,
+shared with your own use of Claude. The schedule is 8:17am,
 1:27pm and 6:37pm Pacific (an hour earlier in winter), just over 5 hours apart, so each run starts
-in a fresh window, while you're awake to approve emailed codes. Each run stops after
-`MAX_BATCHES_PER_RUN` batches (default 6) or as soon as Claude reports a usage limit, leaving some
-of the window for you.
+in a fresh window, while you're awake to approve emailed codes. By default each run keeps going until the queue is empty, Claude reports a usage
+limit, or GitHub's 6-hour job limit nears. To leave room for your own use, set
+`MAX_BATCHES_PER_RUN`, or `USAGE_CAP_5H_USD` / `USAGE_CAP_WEEK_USD` (API-equivalent dollars per
+trailing 5 hours / 7 days, estimated from `data/usage.jsonl` by `scripts/usage_guard.py`).
 
 Each batch's cost is appended to `data/usage.jsonl` (`cost_usd` is the API-equivalent price; on a
 subscription nothing extra is charged). To calibrate, compare a few days of it with
