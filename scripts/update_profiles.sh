@@ -44,10 +44,31 @@ prompt="$(cat prompts/update_profiles.md)
 
 log="data/logs/$(date -u +%Y-%m-%d).log"
 echo "### $(date -u +%H:%MZ) profile update" >> "$log"
-caffeinate -is claude -p "$prompt" \
-  --model "${CLAUDE_MODEL:-sonnet}" \
-  --mcp-config "$cfg" --strict-mcp-config \
-  --permission-mode dontAsk \
-  --tools Read \
-  --allowedTools "mcp__playwright" "mcp__applier__wait_for_candidate" "Read" \
-  --no-session-persistence | tee -a "$log"
+# On Codex (the ChatGPT plan) first, like the job runs; on Claude if Codex isn't available, hits its
+# limit or fails. The agent's report goes to the log and the screen.
+PROMPT="$prompt" CFG="$cfg" LOG="$log" python3 - <<'PY'
+import os, sys, types
+sys.path.insert(0, "scripts")
+import agent
+
+args = types.SimpleNamespace(mcp_config=os.environ["CFG"], tools="Read", caffeinate=True)
+prompt = os.environ["PROMPT"]
+results = []
+binary = agent.codex_bin()
+if binary and not agent.codex_paused():
+    r = agent.run_codex(binary, prompt, args)
+    results.append(r)
+    if r["limited"]:
+        print(f"Codex reached its usage limit until {agent.pause_codex(r['problem']):%H:%MZ}; using Claude.", file=sys.stderr)
+        results.append(agent.run_claude(prompt, args))
+    elif r["error"]:
+        print(f"Codex failed ({r['problem'][:200]}); using Claude.", file=sys.stderr)
+        results.append(agent.run_claude(prompt, args))
+else:
+    results.append(agent.run_claude(prompt, args))
+for r in results:
+    agent.log_usage(r, 0, "update_profiles")
+    with open(os.environ["LOG"], "a") as f:
+        f.write(f"#### profile update ({r['backend']})\n{r['text']}\n")
+print(results[-1]["text"])
+PY
