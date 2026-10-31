@@ -325,6 +325,10 @@ def main():
     mode = effective_mode(cfg)
     rows = load_applications()
     retired = retired_ids(rows, mode)
+    # A job that errored earlier in this run waits for the next run (record_outcome refuses a
+    # second outcome for the same id in one run).
+    run_start = (DATA / ".run_started_at").read_text().strip() if (DATA / ".run_started_at").exists() else ""
+    retired |= {r["id"] for r in rows if run_start and r["at"] >= run_start}
     per_day = limit(cfg, "max_applications_per_day")
     remaining_today = None if per_day is None else max(0, per_day - counted_today(rows, mode))
 

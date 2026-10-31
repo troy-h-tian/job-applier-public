@@ -122,7 +122,7 @@ save() {
 
 list=$(build_queue "$@")
 [ "$list" = list ] || [ "$list" = 0 ] && exit 0
-trap 'rm -f data/.mcp-assist.json data/.secrets.env "$ATTEMPTED"; save' EXIT
+trap 'rm -f data/.mcp-assist.json data/.secrets.env data/.run_context.md "$ATTEMPTED"; save' EXIT
 trap 'exit 130' INT TERM
 
 mkdir -p data/screenshots data/logs
@@ -150,9 +150,7 @@ PY
 
 export MCP_TOOL_TIMEOUT=900000
 while :; do
-prompt="$(cat prompts/apply.md)
-
-## Run context
+cat > data/.run_context.md <<EOF
 - Mode: submit, **assist mode**: the candidate is watching the browser window and will do any
   CAPTCHA, security code or account verification by hand when you ask (see the tools).
 - Jobs without \`my_browser\` were tried before and stopped at a CAPTCHA or bot check. Each queue
@@ -169,26 +167,22 @@ $( [ "$MY_BROWSER" = 1 ] && echo "- **my-browser mode**: the browser is the cand
   at a time. Never log in, and never touch a CAPTCHA, Duo prompt or other verification: use
   \`wait_for_candidate\`. Don't open anything else (feeds, messages, profiles, other jobs). If the
   job can't be found or is closed, record \`skipped\` (\"not found\" or \"closed\") as usual." )
-- Jobs in queue: ${list}
-- Current UTC time: $(date -u +%Y-%m-%dT%H:%MZ)"
+EOF
 
 log="data/logs/$(date -u +%Y-%m-%d).log"
 echo "### $(date -u +%H:%MZ) assist" >> "$log"
-before=$(wc -l < data/applications.jsonl)
-# caffeinate keeps the Mac from idle-sleeping while the batch runs (closing the lid still sleeps it).
-caffeinate -is claude -p "$prompt" \
-  --model "${CLAUDE_MODEL:-sonnet}" \
-  --mcp-config data/.mcp-assist.json --strict-mcp-config \
-  --permission-mode dontAsk \
-  --allowedTools "mcp__playwright" "mcp__applier" "Read" \
-  --no-session-persistence | tee -a "$log" || echo "Claude ended with an error"
+# One fresh Claude session per job (scripts/agent.py); caffeinate keeps the Mac from idle-sleeping
+# meanwhile (closing the lid still sleeps it).
+status=0
+python3 scripts/agent.py --mcp-config data/.mcp-assist.json --tools Read --context-file data/.run_context.md \
+  --log "$log" --echo --caffeinate || status=$?
 
 # One batch unless in my-browser mode; there, keep going until nothing is left (or it's stopped).
 [ "$MY_BROWSER" = 1 ] || break
-# A batch that recorded nothing failed (no credit, no network, browser not connected): stop rather
-# than burn through the list.
-if [ "$(wc -l < data/applications.jsonl)" -eq "$before" ]; then
-  echo "That batch recorded no results, so stopping. Fix the problem above and run it again." >&2
+# Sessions that record nothing failed (no credit, no network, browser not connected), and a usage
+# limit won't lift soon: stop rather than burn through the list.
+if [ "$status" != 0 ]; then
+  echo "Stopping (see above). Fix the problem and run it again." >&2
   break
 fi
 save

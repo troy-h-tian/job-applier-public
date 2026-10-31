@@ -27,7 +27,7 @@ this session.** The candidate does that step; the script's own agent does everyt
 3. Tell the user, briefly, what to do on their side: in Chrome, when the Playwright Extension asks
    which tab to allow, choose the job-application tab it opened ("Allow & select"); a dialog
    beeps whenever a CAPTCHA or code needs them; Skip moves on. If the first line of the output is
-   an error, or a batch records nothing, say why (e.g. no API credit, Chrome not connected).
+   an error, or it stops because jobs record nothing, say why (e.g. no API credit, Chrome not connected).
 4. When it finishes or the user stops it (`TaskStop`), report per job: submitted, still needs a
    human (and why), or not found/closed. The outcomes are the last rows of
    `private/data/applications.jsonl`. Offer to restart.

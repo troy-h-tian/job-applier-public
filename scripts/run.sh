@@ -32,11 +32,9 @@ mode=$(cd scripts && python3 -c 'from common import *; print(effective_mode(load
 
 # wait_for_approved_code can block for up to 12 minutes while you approve a code.
 export MCP_TOOL_TIMEOUT=900000
-budget_args=()
-[ -n "${MAX_BUDGET_USD:-}" ] && budget_args=(--max-budget-usd "$MAX_BUDGET_USD")   # optional
 
-# Work through the queue in batches, each in a fresh Claude session (one session can't hold
-# hundreds of jobs). Stop when nothing is left, after MAX_BATCHES_PER_RUN batches (leaves part of
+# Work through the queue in batches of up to 15 jobs (scripts/agent.py gives each job its own
+# Claude session). Stop when nothing is left, after MAX_BATCHES_PER_RUN batches (leaves part of
 # the subscription's usage for the candidate), when Claude reports a usage limit, or before
 # GitHub's 6-hour job limit.
 deadline=$(( $(date +%s) + ${RUN_MINUTES:-330} * 60 ))
@@ -68,63 +66,27 @@ while [ "$(date +%s)" -lt "$deadline" ]; do
     continue  # the whole batch was screened out; those skips count as progress
   fi
 
-  prompt="$(cat prompts/apply.md)
-
-## Run context
+  # Everything here is the same for every job in the batch; agent.py adds the job itself.
+  cat > data/.run_context.md <<EOF
 - Mode: ${mode}
 - Resume PDF to upload (absolute path): ${PWD}/resume/resume.pdf
 - Unofficial transcript PDF (absolute path): ${PWD}/resume/transcript_unofficial.pdf
 - Official transcript PDF (absolute path): ${PWD}/resume/transcript_official.pdf
 - Writing sample PDF (absolute path): ${PWD}/resume/writing_sample.pdf
-- Jobs in queue: ${queued}
-- Current UTC time: $(date -u +%Y-%m-%dT%H:%MZ)"
+EOF
 
-  # With PUBLIC_LOGS set (the public GitHub workflow), the agent's output, which names companies
-  # and quotes cover letters, goes to a log in the private data repo instead of this public log.
-  out=/dev/stdout
+  # One fresh Claude session per job. With PUBLIC_LOGS set (the public GitHub workflow), the
+  # agent's output, which names companies and quotes cover letters, goes to a log in the private
+  # data repo instead of this public log. Costs and tokens go to data/usage.jsonl.
+  log_args=()
   if [ -n "${PUBLIC_LOGS:-}" ]; then
     mkdir -p data/logs
-    out="data/logs/$(date -u +%Y-%m-%d).log"
-    echo "### $(date -u +%H:%MZ) batch $batch" >> "$out"
+    log_args=(--log "data/logs/$(date -u +%Y-%m-%d).log")
+    echo "### $(date -u +%H:%MZ) batch $batch" >> "${log_args[1]}"
   fi
-  # JSON output carries the session's cost: what it would cost on the API (on a subscription it's
-  # an estimate of usage, not a charge). The agent's text goes to $out; cost to data/usage.jsonl.
-  result=$(mktemp)
-  claude -p "$prompt" \
-    --model "${CLAUDE_MODEL:-sonnet}" \
-    --mcp-config mcp.json --strict-mcp-config \
-    --permission-mode dontAsk \
-    --allowedTools "mcp__playwright" "mcp__applier" "Read" "WebSearch" \
-    --output-format json \
-    ${budget_args[@]+"${budget_args[@]}"} \
-    --no-session-persistence > "$result" 2>&1 || echo "::warning::Batch $batch ended with an error"
-  limited=$(python3 - "$result" "$out" "$batch" <<'PY'
-import datetime as dt, json, re, sys
-raw = open(sys.argv[1]).read()
-try:
-    r = json.loads(raw)
-    text = r.get("result") or ""
-    row = {"at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), "batch": int(sys.argv[3]),
-           "cost_usd": r.get("total_cost_usd"), "minutes": round((r.get("duration_ms") or 0) / 60000, 1),
-           "turns": r.get("num_turns"), "error": r.get("is_error")}
-    with open("data/usage.jsonl", "a") as f:
-        f.write(json.dumps(row) + "\n")
-    print(f"  batch cost (API-equivalent): ${row['cost_usd'] or 0:.2f}, {row['minutes']} min", file=sys.stderr)
-except ValueError:
-    text = raw
-if sys.argv[2] == "/dev/stdout":   # local run: stdout is captured here, so show it on stderr
-    sys.stderr.write(text.rstrip() + "\n")
-else:
-    with open(sys.argv[2], "a") as f:
-        f.write(text.rstrip() + "\n")
-print("1" if re.search(r"hit your .*limit|usage limit|rate limit", text[-500:], re.I) else "0")
-PY
-)
-  rm -f "$result"
-  if [ "$limited" = 1 ]; then
-    echo "::warning::Claude usage limit reached; stopping this run."
-    break
-  fi
+  status=0
+  python3 scripts/agent.py --mcp-config mcp.json --tools Read,WebSearch \
+    --context-file data/.run_context.md --batch "$batch" ${log_args[@]+"${log_args[@]}"} || status=$?
   if [ -n "${PUBLIC_LOGS:-}" ]; then
     python3 - "$before" <<'PY'
 import collections, json, sys
@@ -133,10 +95,11 @@ counts = collections.Counter(json.loads(r)["status"] for r in rows)
 print("  batch outcomes:", ", ".join(f"{n} {s}" for s, n in sorted(counts.items())) or "none")
 PY
   fi
-
-  # If a batch recorded nothing, the same jobs would come back forever; stop instead.
-  if [ "$(wc -l < data/applications.jsonl)" = "$before" ]; then
-    echo "::warning::Batch $batch recorded no outcomes; stopping."
-    break
-  fi
+  case "$status" in
+    0) ;;
+    2) echo "::warning::Claude usage limit reached; stopping this run."; break ;;
+    3) echo "::warning::Agent sessions are recording nothing; stopping."; break ;;
+    4) echo "Application limit reached; stopping."; break ;;
+    *) echo "::warning::Batch $batch ended with an error"; break ;;
+  esac
 done

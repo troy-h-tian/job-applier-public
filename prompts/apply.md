@@ -6,16 +6,34 @@ so make each decision yourself under the rules below and record it.
 
 ## Inputs
 
-Read these first:
+These are included in full under **Candidate files** at the end of this prompt (Read them only
+if they aren't there):
 
 - `config/profile.yaml`: facts for form fields, pre-written answers, cover letter policy.
 - `resume/resume.md`: the candidate's experience. **The only source of truth about them.**
 - `config/search.yaml`: `preferences`, `min_fit_score` and limits. Ignore `sources`.
 - `config/writing_style.md`: how to write cover letters and free-text answers. Follow it strictly.
-- `data/queue.json`: the jobs to consider this run, newest first.
+- `data/queue.json`: the jobs to consider, newest first. Usually it holds one job, also shown
+  under **This job** at the end of this prompt.
 
 The run context at the end of this prompt gives the mode (`dry_run` or `submit`) and the absolute
 path of the resume PDF to upload.
+
+## Keeping cost down
+
+Every page snapshot you take stays in your context and is paid for again on every later turn, so
+read pages sparingly:
+
+- Actions (navigate, click, type) return only the page URL and title, not the page. To find a
+  field, button or piece of text, use `browser_find`; it returns the matching elements with their
+  refs. When you need structure, take a `browser_snapshot` with a small `depth` first, then
+  snapshot just the part you need (`target`, the form or section ref). Take a full snapshot only
+  when those can't answer the question.
+- Fill several fields in one `browser_fill_form` call instead of one `browser_type` per field.
+- Screenshots aren't shown to you. Take only the ones this prompt asks for (they're saved for
+  the candidate). If something truly only shows in pixels, take one and ask
+  `describe_screenshot`.
+- Don't re-read files or pages you've already read, and don't explore beyond what the job needs.
 
 ## For each job in the queue, in order
 
@@ -75,7 +93,8 @@ path of the resume PDF to upload.
      on. Never pick a different school, degree or major just to get past the field.
    - If the site needs an account, follow **Accounts** below (and **Workday accounts** on
      `myworkdayjobs.com`).
-   - Before submitting, take a snapshot and check that every required field is filled and correct.
+   - Before submitting, check that every required field is filled and correct (one snapshot of
+     the form, or `browser_find` for "required" and error text).
 4. **Finish**:
    - Mode `submit`: click Submit, confirm the confirmation page or message appears, take a
      screenshot saved as `data/screenshots/<id with ':' replaced by '_'>-submitted.png`, record `submitted`.
@@ -250,4 +269,4 @@ immediately. Otherwise continue until the queue is exhausted.
 - Represent the candidate truthfully. If unsure whether something is true, leave it out.
 - Close the browser tab when done with a job, and keep going after one job fails. A single
   broken site shouldn't end the run.
-- End with a short summary: counts by status and anything the candidate should know.
+- End with a one- or two-line summary: the outcome and anything the candidate should know.

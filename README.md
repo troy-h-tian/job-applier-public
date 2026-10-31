@@ -63,8 +63,8 @@ days without activity.
 3. Set `DATA_REPO` in `.github/workflows/apply.yml` to the private repo's name.
 4. Optional repository **variables**: `CLAUDE_MODEL` (default `sonnet`), `MAX_BATCHES_PER_RUN`
    (default `6`; `0` = no cap, see **Usage** below), `USAGE_CAP_5H_USD` / `USAGE_CAP_WEEK_USD`
-   (estimated usage caps, defaults 10 and 120; `0` = off), `MAX_BUDGET_USD` (spending cap per batch of
-   15 jobs, API key only; none by default). The API key's Anthropic account needs credit
+   (estimated usage caps, defaults 10 and 120; `0` = off), `MAX_BUDGET_USD` (spending cap per job,
+   API key only; none by default). The API key's Anthropic account needs credit
    ("Credit balance is too low" otherwise).
 5. Run it once from **Actions → Job applier → Run workflow**.
 
@@ -130,11 +130,11 @@ prompt or other check comes up, a dialog beeps and asks the candidate to do that
 Done (or Skip). A security code the candidate already approved with "yes", or an account link,
 is picked up from the relay automatically instead of asking. Results are saved and pushed after
 every batch and whenever the session stops, and it keeps the Mac awake while a batch runs. It
-stops if a batch records nothing (for example, no API credit). `--firefox` uses a separate
+stops if two jobs in a row record nothing (for example, no API credit). `--firefox` uses a separate
 Firefox window instead (untested).
 
-It uses the API key in `~/.config/job-applier/env` (`ANTHROPIC_API_KEY=...`, kept outside the
-repo) when that file exists; `USE_API_KEY=0` uses the `claude` login instead.
+It uses the `claude` login (subscription). `USE_API_KEY=1` uses the API key in
+`~/.config/job-applier/env` (`ANTHROPIC_API_KEY=...`, kept outside the repo) instead.
 
 ## Tailored resumes
 
@@ -167,9 +167,24 @@ while you're awake to approve emailed codes. Each run stops after `MAX_BATCHES_P
 `USAGE_CAP_WEEK_USD` default 120; see `scripts/usage_guard.py`), or as soon as Claude reports a
 usage limit, leaving some of the window for you.
 
-Each batch's cost is appended to `data/usage.jsonl` (`cost_usd` is the API-equivalent price; on a
-subscription nothing extra is charged). With an API key nothing caps spending unless you set one
-of the variables above.
+Each job's cost and token counts are appended to `data/usage.jsonl` (`cost_usd` is the
+API-equivalent price; on a subscription nothing extra is charged). With an API key nothing caps
+spending unless you set one of the variables above.
+
+What keeps it cheap (`scripts/agent.py`, `mcp.json`, `prompts/apply.md`): every turn re-reads the
+whole conversation, so the cost is mostly context size times turns.
+
+- Each job gets its own fresh Claude session, so one job's pages never ride along with the next.
+  The instructions and candidate files come first in every prompt and the job last, so that
+  shared part is cached.
+- The agent has only the tools it needs (`Read`, `WebSearch`, the browser and its own tools), not
+  Claude Code's full set, which would add ~17k tokens to every turn.
+- Browser actions return just the URL and title (`--snapshot-mode none`); the agent looks things
+  up with `browser_find` and small, targeted snapshots instead of whole-page dumps.
+- Screenshots are saved for you but never sent to the agent (`--image-responses omit`); when it
+  needs to see pixels, `describe_screenshot` asks Haiku.
+- `KEEP_SESSIONS=1` keeps the session transcripts (in `~/.claude/projects/`) for looking into
+  where a costly job's tokens went.
 
 ## Tuning (in the private `config/search.yaml`)
 

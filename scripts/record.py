@@ -42,6 +42,17 @@ def record(id, status, company, title, url, reason, fit=None, notes=""):
     with APPLICATIONS.open("a") as f:
         f.write(json.dumps(row) + "\n")
 
+    left = remaining()
+    if left is None:
+        return f"Recorded {status} for {id}. No application limit: continue with the next job."
+    msg = f"Recorded {status} for {id}. Applications remaining this run: {left}"
+    if left == 0:
+        msg += "\nApplication limit reached: record nothing further and finish the run now."
+    return msg
+
+
+def remaining():
+    """Applications left this run under config/search.yaml `limits`, or None for no limit."""
     cfg = load_search_config()
     rows = load_applications()
     per_day, per_run = limit(cfg, "max_applications_per_day"), limit(cfg, "max_applications_per_run")
@@ -49,14 +60,9 @@ def record(id, status, company, title, url, reason, fit=None, notes=""):
     if per_day is not None:
         caps.append(per_day - counted_today(rows, effective_mode(cfg)))
     if per_run is not None:
+        run_start = _run_start()
         caps.append(per_run - sum(1 for r in rows if r["status"] in ("submitted", "dry_run") and r["at"] >= run_start))
-    if not caps:
-        return f"Recorded {status} for {id}. No application limit: continue with the next job."
-    left = max(0, min(caps))
-    msg = f"Recorded {status} for {id}. Applications remaining this run: {left}"
-    if left == 0:
-        msg += "\nApplication limit reached: record nothing further and finish the run now."
-    return msg
+    return max(0, min(caps)) if caps else None
 
 
 def _run_start():
