@@ -35,7 +35,7 @@ export MCP_TOOL_TIMEOUT=900000
 
 # Work through the queue in batches of up to 15 jobs (scripts/agent.py gives each job its own
 # Claude session). Stop when nothing is left, after MAX_BATCHES_PER_RUN batches (leaves part of
-# the subscription's usage for the candidate), when Claude reports a usage limit, or before
+# the subscription's usage for the candidate), when no backend can take more jobs, or before
 # GitHub's 6-hour job limit.
 deadline=$(( $(date +%s) + ${RUN_MINUTES:-330} * 60 ))
 max_batches=${MAX_BATCHES_PER_RUN:-0}   # 0 = no cap
@@ -43,10 +43,6 @@ batch=0
 while [ "$(date +%s)" -lt "$deadline" ]; do
   if [ "$max_batches" -gt 0 ] && [ "$batch" -ge "$max_batches" ]; then
     echo "Stopping after $batch batch(es) (MAX_BATCHES_PER_RUN)."
-    break
-  fi
-  if ! python3 scripts/usage_guard.py; then
-    echo "::warning::Estimated Claude usage is near the cap (USAGE_CAP_5H_USD / USAGE_CAP_WEEK_USD); stopping this run."
     break
   fi
   python3 scripts/discover.py
@@ -100,6 +96,7 @@ PY
     2) echo "::warning::Claude usage limit reached; stopping this run."; break ;;
     3) echo "::warning::Agent sessions are recording nothing; stopping."; break ;;
     4) echo "Application limit reached; stopping."; break ;;
+    5) echo "::warning::No backend (Codex, Gemini, Claude) can take more jobs right now; stopping this run."; break ;;
     *) echo "::warning::Batch $batch ended with an error"; break ;;
   esac
 done

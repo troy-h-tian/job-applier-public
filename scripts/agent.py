@@ -14,7 +14,8 @@ share a prompt prefix (instructions and candidate files, then the job last), whi
 
 Each job's text goes to --log (and/or stderr) and its tokens (and Claude's cost) to data/usage.jsonl.
 Exit status: 0 the batch is done, 2 Claude reported a usage limit, 3 two sessions in a row
-recorded nothing (no credit, no network, browser not connected), 4 the application limit is reached.
+recorded nothing (no credit, no network, browser not connected), 4 the application limit is reached,
+5 no backend can take the job (all paused, failed or capped); the job is left for a later run.
 """
 
 import argparse
@@ -29,6 +30,7 @@ import sys
 import time
 
 from common import QUEUE, ROOT, load_applications
+from usage_guard import capped
 from record import record, remaining
 
 PROMPT = ROOT / "prompts" / "apply.md"
@@ -333,6 +335,10 @@ def run_chain(prompt, args, dead, done=lambda: False):
             dead.add(name)
         if done() or not (r.get("limited") or r["error"]):
             return results
+    if capped():
+        print("Claude is at its estimated usage cap (USAGE_CAP_5H_USD / USAGE_CAP_WEEK_USD); not using it.",
+              file=sys.stderr)
+        return results
     results.append(run_claude(prompt, args))
     return results
 
@@ -356,6 +362,9 @@ def main():
         before = len(load_applications())
         QUEUE.write_text(json.dumps([job], indent=2))   # what data/queue.json means in the prompt
         results = run_chain(build_prompt(context, job), args, dead, done=lambda: recorded(job, before))
+        if not results:
+            print("No backend can take the next job; stopping.", file=sys.stderr)
+            return 5
         for r in results:
             row = log_usage(r, args.batch, job["id"])
             cost = f"${row['cost_usd'] or 0:.2f}, " if r["backend"] == "claude" else ""

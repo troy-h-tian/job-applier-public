@@ -62,7 +62,7 @@ days without activity.
      never sees it: the browser tool fills it in. Without it, Workday jobs are skipped.
 3. Set `DATA_REPO` in `.github/workflows/apply.yml` to the private repo's name.
 4. Optional repository **variables**: `CLAUDE_MODEL` (default `sonnet`), `MAX_BATCHES_PER_RUN`
-   (default `6`; `0` = no cap, see **Usage** below), `USAGE_CAP_5H_USD` / `USAGE_CAP_WEEK_USD`
+   (default `0` = no cap, see **Usage** below), `USAGE_CAP_5H_USD` / `USAGE_CAP_WEEK_USD`
    (estimated usage caps, defaults 10 and 120; `0` = off), `MAX_BUDGET_USD` (spending cap per job,
    API key only; none by default). The API key's Anthropic account needs credit
    ("Credit balance is too low" otherwise).
@@ -167,10 +167,11 @@ Runs use your Claude subscription (`CLAUDE_CODE_OAUTH_TOKEN`) when it's set, oth
 `ANTHROPIC_API_KEY` (billed per token). The subscription allows a certain amount per 5-hour window
 plus a weekly cap, shared with your own use of Claude. The schedule is 8:17am, 1:27pm and 6:37pm
 Pacific (an hour earlier in winter), just over 5 hours apart, so each run starts in a fresh window,
-while you're awake to approve emailed codes. Each run stops after `MAX_BATCHES_PER_RUN` batches
-(default 6), when the estimated usage caps are reached (`USAGE_CAP_5H_USD` default 10,
-`USAGE_CAP_WEEK_USD` default 120; see `scripts/usage_guard.py`), or as soon as Claude reports a
-usage limit, leaving some of the window for you.
+while you're awake to approve emailed codes. Each run keeps going until the queue is empty, no backend can take more jobs, or
+`MAX_BATCHES_PER_RUN` batches are done (default: no limit). To leave you room, Claude is only used
+while its estimated usage is under `USAGE_CAP_5H_USD` (default 10) and `USAGE_CAP_WEEK_USD` (default
+120), checked before every Claude session (`scripts/usage_guard.py`); Codex and Gemini are not
+counted. Once Claude is capped or reports a usage limit, jobs only run on the other backends.
 
 Each job's cost and token counts are appended to `data/usage.jsonl` (`cost_usd` is the
 API-equivalent price; on a subscription nothing extra is charged). With an API key nothing caps

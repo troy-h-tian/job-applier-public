@@ -2,7 +2,8 @@
 
 Claude Code doesn't expose how full the 5-hour and weekly usage bars are, so this estimates them
 from data/usage.jsonl: the API-equivalent cost of every batch in the trailing 5 hours and 7 days.
-Exit status 3 means a cap would be passed by the next batch; run.sh then stops.
+Exit status 3 means a cap would be passed by the next batch. scripts/agent.py checks it before
+every Claude session and skips Claude when it's capped (Codex and Gemini are not counted).
 
 Caps are in API-equivalent USD (env vars, 0 disables one):
   USAGE_CAP_5H_USD    default 10    (the limit was hit at 14-36 in the 5h window)
@@ -35,7 +36,8 @@ def spent(hours, now):
     return total
 
 
-def main():
+def capped():
+    """True if the next Claude batch would pass a usage cap; prints where each cap stands."""
     now = dt.datetime.now(dt.timezone.utc)
     need = float(os.environ.get("NEXT_BATCH_USD", "5"))
     caps = {
@@ -49,7 +51,11 @@ def main():
         if cap > 0 and used + need > cap:
             over, note = True, "  <- would pass the cap"
         print(f"  usage {name}: ${used:.2f} of ${cap:.2f} (API-equivalent){note}", file=sys.stderr)
-    sys.exit(3 if over else 0)
+    return over
+
+
+def main():
+    sys.exit(3 if capped() else 0)
 
 
 if __name__ == "__main__":
