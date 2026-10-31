@@ -54,7 +54,7 @@ days without activity.
 1. Create the private data repo with the layout above.
 2. In this repo's **Settings → Secrets and variables → Actions**, add:
    - `CLAUDE_CODE_OAUTH_TOKEN` (from `claude setup-token`) or `ANTHROPIC_API_KEY`. If both are
-     set, the API key is used and the subscription token is the fallback.
+     set, the subscription token is used and the API key is the fallback.
    - `DATA_REPO_TOKEN`: a fine-grained token with **Contents: Read and write** on the private repo.
    - `WORKDAY_PASSWORD` (optional, despite the name): the password for every candidate account
      the agent creates, on Workday and any other application site. Use one you don't reuse
@@ -158,15 +158,14 @@ are saved under `data/tailored/<job id>/`, so you can see exactly what was sent.
 
 ## Usage
 
-Runs use `ANTHROPIC_API_KEY` (billed per token) when it's set, otherwise your Claude
-subscription (`CLAUDE_CODE_OAUTH_TOKEN`). The subscription allows a certain amount per 5-hour
-window plus a weekly cap, shared with your own use of Claude. The schedule is 8:17am, 1:27pm and
-6:37pm Pacific (an hour earlier in winter), just over 5 hours apart, so each run starts in a
-fresh window, while you're awake to approve emailed codes. By default each run keeps going until
-the queue is empty, Claude reports a usage limit, or GitHub's 6-hour job limit nears. To leave
-room for your own use, set `MAX_BATCHES_PER_RUN`, or `USAGE_CAP_5H_USD` / `USAGE_CAP_WEEK_USD`
-(API-equivalent dollars per trailing 5 hours / 7 days, estimated from `data/usage.jsonl` by
-`scripts/usage_guard.py`).
+Runs use your Claude subscription (`CLAUDE_CODE_OAUTH_TOKEN`) when it's set, otherwise
+`ANTHROPIC_API_KEY` (billed per token). The subscription allows a certain amount per 5-hour window
+plus a weekly cap, shared with your own use of Claude. The schedule is 8:17am, 1:27pm and 6:37pm
+Pacific (an hour earlier in winter), just over 5 hours apart, so each run starts in a fresh window,
+while you're awake to approve emailed codes. Each run stops after `MAX_BATCHES_PER_RUN` batches
+(default 6), when the estimated usage caps are reached (`USAGE_CAP_5H_USD` default 10,
+`USAGE_CAP_WEEK_USD` default 120; see `scripts/usage_guard.py`), or as soon as Claude reports a
+usage limit, leaving some of the window for you.
 
 Each batch's cost is appended to `data/usage.jsonl` (`cost_usd` is the API-equivalent price; on a
 subscription nothing extra is charged). With an API key nothing caps spending unless you set one
