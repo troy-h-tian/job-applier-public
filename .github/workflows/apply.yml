@@ -20,6 +20,10 @@ on:
         type: choice
         options: [config, dry_run, submit]
         default: config
+      max_batches:
+        description: "Stop after this many batches of 15 jobs (blank: the MAX_BATCHES_PER_RUN variable, default 6)"
+        type: string
+        default: ""
 
 permissions:
   contents: write   # only for the last-run.txt heartbeat below
@@ -124,7 +128,7 @@ jobs:
           DATA_REPO_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}   # reads and deletes approved codes
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'sonnet' }}
           MAX_BUDGET_USD: ${{ vars.MAX_BUDGET_USD }}   # optional per-job spending cap
-          MAX_BATCHES_PER_RUN: ${{ vars.MAX_BATCHES_PER_RUN || '6' }}   # 0 = until the queue or usage runs out
+          MAX_BATCHES_PER_RUN: ${{ inputs.max_batches || vars.MAX_BATCHES_PER_RUN || '6' }}   # 0 = until the queue or usage runs out
           USAGE_CAP_5H_USD: ${{ vars.USAGE_CAP_5H_USD || '10' }}   # estimated usage caps, see scripts/usage_guard.py
           USAGE_CAP_WEEK_USD: ${{ vars.USAGE_CAP_WEEK_USD || '120' }}
           APPLIER_MODE: ${{ inputs.mode == 'config' && '' || inputs.mode }}
