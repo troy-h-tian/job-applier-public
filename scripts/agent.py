@@ -1,9 +1,10 @@
 """Run the application agent on the jobs in data/queue.json, one fresh session per job.
 
-Each job goes to Codex first (the candidate's ChatGPT plan, via `codex login`), then to Gemini
-(the candidate's Google plan, via the Antigravity CLI `agy`), then to Claude, skipping any that
-isn't installed, signed in or under its usage limit. A backend that reports a limit is paused until
-it resets (data/.paused_<name>). USE_CODEX=0 / USE_GEMINI=0 turn one off; both off uses Claude only.
+Each job goes to the first available backend in BACKENDS, then to Claude: Gemini (the candidate's
+Google plan, via the Antigravity CLI `agy`) then Codex (their ChatGPT plan, via `codex login`) on
+the candidate's Mac, Codex alone in GitHub Actions. A backend that isn't installed or signed in, or
+is under its usage limit, is skipped; one that reports a limit is paused until it resets
+(data/.paused_<name>). USE_CODEX=0 / USE_GEMINI=0 turn one off; with none left, Claude does it.
 
 A session's cost grows with everything already in its context (page snapshots stay there and are
 re-read on every turn), so one session per job is much cheaper than one per batch. The sessions
@@ -299,13 +300,22 @@ def recorded(job, before):
     return any(a["id"] == job["id"] for a in load_applications()[before:])
 
 
+def backend_order():
+    """BACKENDS (comma-separated) before Claude; default gemini,codex, or just codex in GitHub Actions
+    (which has no Gemini login)."""
+    default = "codex" if os.environ.get("GITHUB_ACTIONS") else "gemini,codex"
+    return [n for n in os.environ.get("BACKENDS", default).replace(" ", "").split(",") if n in ("codex", "gemini")]
+
+
 def run_chain(prompt, args, dead, done=lambda: False):
-    """Run one session on each backend in turn until the work is done: Codex, then Gemini, then
-    Claude. A backend is skipped if it isn't installed or signed in, is paused after reporting a usage
+    """Run one session on each backend in turn until the work is done: those in backend_order(),
+    then Claude. A backend is skipped if it isn't installed or signed in, is paused after reporting a usage
     limit, or failed earlier in this batch (`dead`). done() says whether the job has its outcome
     (a session can fail after finishing). Returns the sessions run, the last one being the result."""
     results = []
-    for name, binary, runner in (("codex", codex_bin(), run_codex), ("gemini", gemini_bin(), run_gemini)):
+    available = {"codex": (codex_bin(), run_codex), "gemini": (gemini_bin(), run_gemini)}
+    for name in backend_order():
+        binary, runner = available[name]
         if not binary or name in dead or paused(name):
             continue
         if name == "gemini" and not agy_signed_in():

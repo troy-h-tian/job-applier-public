@@ -75,7 +75,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install -r requirements.txt
-          npm install -g @anthropic-ai/claude-code
+          npm install -g @anthropic-ai/claude-code @openai/codex
           # Warm the Playwright MCP package; it drives the runner's preinstalled Google Chrome.
           npx -y @playwright/mcp@0.0.83 --help > /dev/null
 
@@ -103,6 +103,18 @@ jobs:
           fi
           python3 scripts/tailor.py --base /tmp/base-resume.pdf > /dev/null || echo "::warning::Tectonic could not build the resume; the original PDF will be used."
 
+      # Jobs go to Codex (the ChatGPT plan) first and to Claude when Codex isn't signed in or hits its
+      # limit (scripts/agent.py). Its login is a dedicated one for this workflow, kept in the private
+      # repo (data/codex_auth.json) and written back below, because Codex refreshes it while it runs.
+      - name: Restore the Codex login
+        run: |
+          mkdir -p ~/.codex
+          if [ -f private/data/codex_auth.json ]; then
+            install -m 600 private/data/codex_auth.json ~/.codex/auth.json
+          else
+            echo "No Codex login in the private repo (data/codex_auth.json); jobs will use Claude."
+          fi
+
       - name: Find jobs and apply
         timeout-minutes: 345   # run.sh stops starting batches at 330; leaves time to save
         env:
@@ -118,6 +130,13 @@ jobs:
           APPLIER_MODE: ${{ inputs.mode == 'config' && '' || inputs.mode }}
           PUBLIC_LOGS: "1"   # agent output goes to private/data/logs/, not this log
         run: scripts/run.sh
+
+      - name: Keep the refreshed Codex login
+        if: always()
+        run: |
+          if [ -f ~/.codex/auth.json ] && [ -f private/data/codex_auth.json ]; then
+            install -m 600 ~/.codex/auth.json private/data/codex_auth.json
+          fi
 
       - name: Save results to the private repo
         if: always()

@@ -191,26 +191,32 @@ whole conversation, so the cost is mostly context size times turns.
 - `KEEP_SESSIONS=1` keeps the session transcripts (in `~/.claude/projects/`) for looking into
   where a costly job's tokens went.
 
-### Codex, then Gemini, then Claude
+### Gemini and Codex first, then Claude
 
-Each job runs on the first backend that is installed, signed in and under its usage limit, and
-Claude is the last resort. All get the same prompt and browser tools.
+Each job runs on the first backend in the list that is installed, signed in and under its usage
+limit, with Claude as the last resort. All get the same prompt and browser tools.
 
-1. **Codex** (the ChatGPT plan): `npm i -g --prefix ~/.npm-global @openai/codex`, then
-   `codex login` and "Sign in with ChatGPT". Its shell and built-in browser are switched off.
-2. **Gemini** (the Google AI plan): `brew install --cask antigravity-cli`, then run `agy` once to
+- **On the candidate's Mac** (assist, local runs, the profile update): Gemini, then Codex, then Claude.
+- **In GitHub Actions:** Codex, then Claude (no Gemini login there). `BACKENDS` overrides the list.
+
+1. **Gemini** (the Google AI plan): `brew install --cask antigravity-cli`, then run `agy` once to
    sign in. `agy` can't switch off its own shell and file tools, so each session runs with a
    workspace `.agents/hooks.json` hook (`scripts/agent.py`, `GATE`) that denies every tool except
    calls to the browser and applier servers, plus permission rules approving only those two. It
    never uses `--dangerously-skip-permissions`. The `.agents/` folder exists only while a session
    runs. `GEMINI_MODEL` picks the model (default `gemini-3.8-flash-high`).
+2. **Codex** (the ChatGPT plan): `npm i -g --prefix ~/.npm-global @openai/codex`, then
+   `codex login` and "Sign in with ChatGPT". Its shell and built-in browser are switched off.
+   *GitHub Actions* uses a second, dedicated login (`CODEX_HOME=~/.codex-github codex login`, then
+   copy its `auth.json` to `data/codex_auth.json` in the private repo). The workflow restores it
+   before each run and saves the refreshed copy afterwards, so it never shares a refresh chain with
+   the Mac's login. Without that file the workflow uses Claude only.
 3. **Claude**: the subscription, or the API key.
 
-When a backend reports a usage limit it's paused until the reset time it gives (or an hour;
-`data/.paused_<name>`) and the job goes to the next one. A backend that fails for another reason
-is skipped for the rest of the batch. `USE_CODEX=0` / `USE_GEMINI=0` turn one off. Only Claude's
-cost is counted by the usage caps. GitHub runs don't have Codex or Gemini, so they use Claude. The
-profile update (`scripts/update_profiles.sh`) uses the same order.
+Gemini and Codex have no usage caps here. When one reports a usage limit it's paused until the
+reset time it gives (or an hour; `data/.paused_<name>`) and the job goes to the next one. A backend
+that fails for another reason is skipped for the rest of the batch. `USE_CODEX=0` / `USE_GEMINI=0`
+turn one off. Only Claude's cost is counted by the usage caps below.
 
 ## Tuning (in the private `config/search.yaml`)
 
