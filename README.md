@@ -191,15 +191,26 @@ whole conversation, so the cost is mostly context size times turns.
 - `KEEP_SESSIONS=1` keeps the session transcripts (in `~/.claude/projects/`) for looking into
   where a costly job's tokens went.
 
-### Codex first (ChatGPT plan)
+### Codex, then Gemini, then Claude
 
-Where OpenAI's Codex CLI is installed and signed in with ChatGPT (`npm i -g --prefix ~/.npm-global
-@openai/codex`, then `codex login`), each job runs on Codex first, with the same prompt and browser
-tools, so it uses the ChatGPT plan's allowance instead of Claude's. When Codex reports a usage
-limit, jobs go to Claude until the reset time it gives (or an hour; `data/.codex_paused_until`).
-If a Codex session fails for another reason, that job is redone on Claude and the rest of the batch
-stays on Claude. Codex sessions aren't counted by the Claude usage caps. `USE_CODEX=0` uses Claude
-only; `CODEX_MODEL` picks the model. GitHub runs don't have Codex, so they use Claude.
+Each job runs on the first backend that is installed, signed in and under its usage limit, and
+Claude is the last resort. All get the same prompt and browser tools.
+
+1. **Codex** (the ChatGPT plan): `npm i -g --prefix ~/.npm-global @openai/codex`, then
+   `codex login` and "Sign in with ChatGPT". Its shell and built-in browser are switched off.
+2. **Gemini** (the Google AI plan): `brew install --cask antigravity-cli`, then run `agy` once to
+   sign in. `agy` can't switch off its own shell and file tools, so each session runs with a
+   workspace `.agents/hooks.json` hook (`scripts/agent.py`, `GATE`) that denies every tool except
+   calls to the browser and applier servers, plus permission rules approving only those two. It
+   never uses `--dangerously-skip-permissions`. The `.agents/` folder exists only while a session
+   runs. `GEMINI_MODEL` picks the model (default `gemini-3.8-flash-high`).
+3. **Claude**: the subscription, or the API key.
+
+When a backend reports a usage limit it's paused until the reset time it gives (or an hour;
+`data/.paused_<name>`) and the job goes to the next one. A backend that fails for another reason
+is skipped for the rest of the batch. `USE_CODEX=0` / `USE_GEMINI=0` turn one off. Only Claude's
+cost is counted by the usage caps. GitHub runs don't have Codex or Gemini, so they use Claude. The
+profile update (`scripts/update_profiles.sh`) uses the same order.
 
 ## Tuning (in the private `config/search.yaml`)
 

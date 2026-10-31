@@ -7,3 +7,4 @@ last-run.txt.tmp
 .claude/settings.local.json
 __pycache__/
 .DS_Store
+.agents/

@@ -1,8 +1,9 @@
 """Run the application agent on the jobs in data/queue.json, one fresh session per job.
 
-Each job goes to Codex first (the candidate's ChatGPT plan, via `codex login`) when it's installed
-and signed in, and to Claude when Codex isn't available or reports a usage limit; Codex is then
-paused until its limit resets (data/.codex_paused_until). USE_CODEX=0 uses Claude only.
+Each job goes to Codex first (the candidate's ChatGPT plan, via `codex login`), then to Gemini
+(the candidate's Google plan, via the Antigravity CLI `agy`), then to Claude, skipping any that
+isn't installed, signed in or under its usage limit. A backend that reports a limit is paused until
+it resets (data/.paused_<name>). USE_CODEX=0 / USE_GEMINI=0 turn one off; both off uses Claude only.
 
 A session's cost grows with everything already in its context (page snapshots stay there and are
 re-read on every turn), so one session per job is much cheaper than one per batch. The sessions
@@ -31,8 +32,8 @@ from record import record, remaining
 
 PROMPT = ROOT / "prompts" / "apply.md"
 USAGE = ROOT / "data" / "usage.jsonl"
-CODEX_PAUSE = ROOT / "data" / ".codex_paused_until"
-LIMIT = re.compile(r"hit your .*limit|usage limit|rate limit|quota|credit balance is too low", re.I)
+CLAUDE_LIMIT = re.compile(r"hit your .*limit|usage limit|rate limit|credit balance is too low", re.I)
+LIMIT = re.compile(r"hit your .*limit|usage limit|rate limit|quota|exhausted|credit balance is too low|\b429\b", re.I)
 # The parts of config/search.yaml the agent uses; the rest (sources, title filters) is for discovery.
 SEARCH_KEYS = ("mode", "limits", "min_fit_score", "preferences")
 # Screenshots are saved for the candidate but never shown to the agent (see mcp.json); it reads
@@ -119,7 +120,7 @@ def run_claude(prompt, args):
             "cost_usd": r.get("total_cost_usd"), "turns": r.get("num_turns"),
             "input_tokens": u.get("input_tokens"), "cache_read_tokens": u.get("cache_read_input_tokens"),
             "cache_write_tokens": u.get("cache_creation_input_tokens"), "output_tokens": u.get("output_tokens"),
-            "limited": bool(LIMIT.search(text[-500:]))}
+            "limited": bool(CLAUDE_LIMIT.search(text[-500:]))}
 
 
 def codex_bin():
@@ -129,23 +130,24 @@ def codex_bin():
         (p for p in [os.path.expanduser("~/.npm-global/bin/codex")] if os.access(p, os.X_OK)), None)
 
 
-def codex_paused():
+def paused(name):
     try:
-        return dt.datetime.now(dt.timezone.utc) < dt.datetime.fromisoformat(CODEX_PAUSE.read_text().strip())
+        return dt.datetime.now(dt.timezone.utc) < dt.datetime.fromisoformat(
+            (ROOT / "data" / f".paused_{name}").read_text().strip())
     except (FileNotFoundError, ValueError):
         return False
 
 
-def pause_codex(message):
-    """Pause Codex until the reset time its limit message gives ("try again in 2 hours 5 minutes"),
-    or for an hour."""
+def pause(name, message):
+    """Pause a backend until the reset time its limit message gives ("try again in 2 hours 5
+    minutes"), or for an hour."""
     m = re.search(r"in ((?:\d+\s*(?:days?|hours?|hrs?|minutes?|mins?)[\s,and]*)+)", message, re.I)
     wait = dt.timedelta(hours=1)
     if m:
         parts = dict((u[0].lower(), int(n)) for n, u in re.findall(r"(\d+)\s*([a-z]+)", m.group(1), re.I))
         wait = dt.timedelta(days=parts.get("d", 0), hours=parts.get("h", 0), minutes=parts.get("m", 0)) or wait
     until = dt.datetime.now(dt.timezone.utc) + wait
-    CODEX_PAUSE.write_text(until.isoformat(timespec="seconds"))
+    (ROOT / "data" / f".paused_{name}").write_text(until.isoformat(timespec="seconds"))
     return until
 
 
@@ -208,6 +210,79 @@ def run_codex(binary, prompt, args):
             "output_tokens": usage.get("output_tokens"), "limited": bool(LIMIT.search(problem)), "problem": problem}
 
 
+GATE = '''#!/usr/bin/env python3
+"""PreToolUse gate for unattended job-applier sessions: allow only the browser and applier MCP
+servers (and reading their tool schemas); deny every other tool, including shell and file access."""
+import json, os, sys
+
+call = json.load(sys.stdin).get("toolCall") or {}
+name, args = call.get("name"), call.get("args") or {}
+schemas = os.path.realpath(os.path.expanduser("~/.gemini/antigravity-cli/mcp")) + os.sep
+ok = False
+if name == "call_mcp_tool":
+    ok = args.get("ServerName") in ("playwright", "applier") and args.get("ToolName") != "browser_run_code_unsafe"
+elif name in ("read_file", "list_dir", "view_file"):
+    path = os.path.realpath(os.path.expanduser(str(args.get("Path") or args.get("DirectoryPath") or "")))
+    ok = path.startswith(schemas)
+print(json.dumps({"decision": "allow"} if ok else
+                 {"decision": "deny", "reason": "only the browser tools are available here"}))
+'''
+
+
+def gemini_bin():
+    if os.environ.get("USE_GEMINI", "1") == "0":
+        return None
+    return shutil.which("agy")
+
+
+def agy_signed_in():
+    out = subprocess.run(["agy", "models"], capture_output=True, text=True, timeout=60)
+    return out.returncode == 0 and "sign in" not in (out.stdout + out.stderr).lower()
+
+
+def run_gemini(binary, prompt, args):
+    """One session on Gemini through the Antigravity CLI, which has no way to switch off its shell
+    and file tools. So the session runs with a PreToolUse hook (.agents/hooks.json) that denies
+    every tool except calls to the playwright and applier MCP servers, and permission rules that
+    pre-approve only those two. Never --dangerously-skip-permissions."""
+    cfg = json.load(open(ROOT / args.mcp_config))
+    servers = {}
+    for name, server in cfg["mcpServers"].items():
+        servers[name] = {
+            "command": server["command"],
+            "args": [str(ROOT / a) if re.match(r"(data|scripts)/", a) else expand(a) for a in server.get("args", [])],
+            "env": {k: expand(v) for k, v in server.get("env", {}).items()}}
+    agents = ROOT / ".agents"
+    agents.mkdir(exist_ok=True)
+    (agents / "gate.py").write_text(GATE)
+    (agents / "hooks.json").write_text(json.dumps({"job-applier-gate": {"PreToolUse": [
+        {"matcher": "*", "hooks": [{"command": f"python3 {agents / 'gate.py'}", "timeout": 10}]}]}}))
+    (agents / "mcp_config.json").write_text(json.dumps({"mcpServers": servers}, indent=2))
+    cmd = [binary, "-p", prompt, "--model", os.environ.get("GEMINI_MODEL", "gemini-3.8-flash-high"),
+           "--output-format", "json",
+           "--settings", json.dumps({"permissions": {"allow": ["mcp(playwright/*)", "mcp(applier/*)"]}})]
+    try:
+        out, err, seconds = run(cmd, args)
+    finally:   # so a person's own agy sessions in this folder aren't restricted
+        shutil.rmtree(agents, ignore_errors=True)
+    if out is None:
+        return {"backend": "gemini", "text": f"Session timed out after {JOB_TIMEOUT_MINUTES} minutes.",
+                "error": True, "seconds": seconds}
+    try:
+        r = json.loads(out[out.index("{"):])
+    except ValueError:
+        problem = (out + err).strip()[-600:]
+        return {"backend": "gemini", "text": problem, "error": True, "seconds": seconds,
+                "limited": bool(LIMIT.search(problem)), "problem": problem}
+    u = r.get("usage") or {}
+    ok = r.get("status") == "SUCCESS"
+    text = (r.get("response") or "").rstrip()
+    return {"backend": "gemini", "text": text, "error": not ok, "seconds": seconds, "turns": r.get("num_turns"),
+            "input_tokens": u.get("input_tokens"), "cache_read_tokens": u.get("cache_read_tokens"),
+            "output_tokens": u.get("output_tokens"), "limited": (not ok) and bool(LIMIT.search(text)),
+            "problem": "" if ok else text}
+
+
 def log_usage(r, batch, job_id):
     row = {"at": dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds"), "batch": batch,
            "job": job_id, "backend": r["backend"],
@@ -224,6 +299,34 @@ def recorded(job, before):
     return any(a["id"] == job["id"] for a in load_applications()[before:])
 
 
+def run_chain(prompt, args, dead, done=lambda: False):
+    """Run one session on each backend in turn until the work is done: Codex, then Gemini, then
+    Claude. A backend is skipped if it isn't installed or signed in, is paused after reporting a usage
+    limit, or failed earlier in this batch (`dead`). done() says whether the job has its outcome
+    (a session can fail after finishing). Returns the sessions run, the last one being the result."""
+    results = []
+    for name, binary, runner in (("codex", codex_bin(), run_codex), ("gemini", gemini_bin(), run_gemini)):
+        if not binary or name in dead or paused(name):
+            continue
+        if name == "gemini" and not agy_signed_in():
+            print("Gemini isn't signed in (run `agy`); skipping it.", file=sys.stderr)
+            dead.add(name)
+            continue
+        r = runner(binary, prompt, args)
+        results.append(r)
+        if r.get("limited"):
+            print(f"{name.title()} reached its usage limit; paused until {pause(name, r['problem']):%H:%MZ}.",
+                  file=sys.stderr)
+        elif r["error"] and not done():
+            print(f"{name.title()} failed ({(r.get('problem') or r['text'])[:200]}); skipping it for this batch.",
+                  file=sys.stderr)
+            dead.add(name)
+        if done() or not (r.get("limited") or r["error"]):
+            return results
+    results.append(run_claude(prompt, args))
+    return results
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     p.add_argument("--mcp-config", required=True)
@@ -237,25 +340,12 @@ def main():
 
     context = open(args.context_file).read()
     jobs = json.loads(QUEUE.read_text())
-    codex = codex_bin()
+    dead = set()   # backends that failed in this batch
     misses = 0
     for n, job in enumerate(jobs, 1):
         before = len(load_applications())
         QUEUE.write_text(json.dumps([job], indent=2))   # what data/queue.json means in the prompt
-        prompt = build_prompt(context, job)
-        results = []
-        if codex and not codex_paused():
-            r = run_codex(codex, prompt, args)
-            results.append(r)
-            if r["limited"]:
-                print(f"Codex reached its usage limit; using Claude until {pause_codex(r['problem']):%H:%MZ}.",
-                      file=sys.stderr)
-            elif r["error"] and not recorded(job, before):
-                print(f"Codex failed ({r['problem'][:200]}); using Claude for the rest of this batch.",
-                      file=sys.stderr)
-                codex = None
-        if not recorded(job, before):
-            results.append(run_claude(prompt, args))
+        results = run_chain(build_prompt(context, job), args, dead, done=lambda: recorded(job, before))
         for r in results:
             row = log_usage(r, args.batch, job["id"])
             cost = f"${row['cost_usd'] or 0:.2f}, " if r["backend"] == "claude" else ""
