@@ -52,7 +52,10 @@ sys.path.insert(0, "scripts")
 import agent
 
 args = types.SimpleNamespace(mcp_config=os.environ["CFG"], tools="Read", caffeinate=True)
-prompt = os.environ["PROMPT"]
+# Inlined, since Codex has no file-reading tool.
+files = "\n\n".join(f"### `{n}`\n\n````\n{(agent.ROOT / n).read_text().strip()}\n````"
+                     for n in ("resume/resume.md", "config/profile.yaml"))
+prompt = os.environ["PROMPT"] + f"\n\n## Candidate files\n\n{files}\n"
 results = []
 binary = agent.codex_bin()
 if binary and not agent.codex_paused():
