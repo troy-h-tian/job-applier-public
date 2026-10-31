@@ -136,6 +136,11 @@ Firefox window instead (untested).
 It uses the `claude` login (subscription). `USE_API_KEY=1` uses the API key in
 `~/.config/job-applier/env` (`ANTHROPIC_API_KEY=...`, kept outside the repo) instead.
 
+`scripts/update_profiles.sh` uses the same setup to bring the candidate's Handshake, WayUp and
+Indeed profiles in line with `resume.md` (`prompts/update_profiles.md`): it adds what's missing and
+corrects what contradicts the resume, keeps true extra details, uploads the resume PDF, and never
+changes account, privacy or EEO settings. Don't run it while `assist.sh` is running.
+
 ## Tailored resumes
 
 For each application Claude may build a copy of the resume that leans toward the company: it can
