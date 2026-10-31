@@ -254,6 +254,8 @@ immediately. Otherwise continue until the queue is exhausted.
   certifications, clearances, work authorization, GPA, dates or employers, and never to claims
   written in free text, cover letters or the resume, which stay strictly true to `resume.md`.
   Note each such answer in `notes`.
+- **Expected graduation date.** It's an expected date, so when a field needs a full date and the
+  profile gives only a month and year, use the 15th of that month (e.g. 06/15/2029).
 - **Any term.** The candidate applies to internships in any term (summer, fall, winter, spring,
   co-ops, part-time) that hasn't ended. For term, start-date and availability questions, give the
   posting's own term and dates; `earliest_start_date` applies to summer 2027 roles only.

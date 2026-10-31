@@ -191,6 +191,16 @@ whole conversation, so the cost is mostly context size times turns.
 - `KEEP_SESSIONS=1` keeps the session transcripts (in `~/.claude/projects/`) for looking into
   where a costly job's tokens went.
 
+### Codex first (ChatGPT plan)
+
+Where OpenAI's Codex CLI is installed and signed in with ChatGPT (`npm i -g --prefix ~/.npm-global
+@openai/codex`, then `codex login`), each job runs on Codex first, with the same prompt and browser
+tools, so it uses the ChatGPT plan's allowance instead of Claude's. When Codex reports a usage
+limit, jobs go to Claude until the reset time it gives (or an hour; `data/.codex_paused_until`).
+If a Codex session fails for another reason, that job is redone on Claude and the rest of the batch
+stays on Claude. Codex sessions aren't counted by the Claude usage caps. `USE_CODEX=0` uses Claude
+only; `CODEX_MODEL` picks the model. GitHub runs don't have Codex, so they use Claude.
+
 ## Tuning (in the private `config/search.yaml`)
 
 - **Where it looks:** board names under `sources`, Workday career-site URLs, the aggregate
