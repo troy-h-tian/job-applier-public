@@ -62,8 +62,8 @@ days without activity.
      never sees it: the browser tool fills it in. Without it, Workday jobs are skipped.
 3. Set `DATA_REPO` in `.github/workflows/apply.yml` to the private repo's name.
 4. Optional repository **variables**: `CLAUDE_MODEL` (default `sonnet`), `MAX_BATCHES_PER_RUN`
-   (default `0` = no cap, see **Usage** below), `USAGE_CAP_5H_USD` / `USAGE_CAP_WEEK_USD`
-   (estimated usage caps, default `0` = off), `MAX_BUDGET_USD` (spending cap per batch of
+   (default `6`; `0` = no cap, see **Usage** below), `USAGE_CAP_5H_USD` / `USAGE_CAP_WEEK_USD`
+   (estimated usage caps, defaults 10 and 120; `0` = off), `MAX_BUDGET_USD` (spending cap per batch of
    15 jobs, API key only; none by default). The API key's Anthropic account needs credit
    ("Credit balance is too low" otherwise).
 5. Run it once from **Actions → Job applier → Run workflow**.
