@@ -183,6 +183,10 @@ def run_codex(binary, prompt, args):
         cmd += ["-m", os.environ["CODEX_MODEL"]]
     for name, server in json.load(open(ROOT / args.mcp_config))["mcpServers"].items():
         key = f"mcp_servers.{name}"
+        if "url" in server:   # a server already running (assist.sh's shared browser tool)
+            cmd += ["-c", f"{key}.url={toml(server['url'])}", "-c", f"{key}.tool_timeout_sec=900",
+                    "-c", f'{key}.default_tools_approval_mode="approve"']
+            continue
         cmd += ["-c", f"{key}.command={toml(server['command'])}",
                 "-c", f"{key}.args={toml([expand(a) for a in server.get('args', [])])}",
                 "-c", f"{key}.env={toml({k: expand(v) for k, v in server.get('env', {}).items()})}",
@@ -255,6 +259,9 @@ def run_gemini(binary, prompt, args):
     cfg = json.load(open(ROOT / args.mcp_config))
     servers = {}
     for name, server in cfg["mcpServers"].items():
+        if "url" in server:
+            servers[name] = {"url": server["url"]}
+            continue
         servers[name] = {
             "command": server["command"],
             "args": [str(ROOT / a) if re.match(r"(data|scripts)/", a) else expand(a) for a in server.get("args", [])],

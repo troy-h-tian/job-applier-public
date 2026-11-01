@@ -39,6 +39,7 @@ else
   unset ANTHROPIC_API_KEY
   echo "Using the claude login (subscription)" >&2
 fi
+export PLAYWRIGHT_PORT="${PLAYWRIGHT_PORT:-8931}"
 export MY_BROWSER=0
 export USE_FIREFOX=0
 case " $* " in *" --my-browser "*) MY_BROWSER=1 ;; esac
@@ -133,6 +134,8 @@ save() {
   git -C private pull -q --rebase && git -C private push -q
 }
 
+# Skip postings that are plainly closed without opening a browser (employer links only).
+case " $* " in *" --list "*) ;; *) python3 scripts/stale_check.py || true ;; esac
 list=$(build_queue "$@")
 [ "$list" = list ] || [ "$list" = 0 ] && exit 0
 trap 'rm -f data/.mcp-assist.json data/.secrets.env data/.run_context.md "$ATTEMPTED"; save' EXIT
@@ -157,11 +160,26 @@ if os.environ.get("MY_BROWSER") == "1":
         args += ["--browser", "firefox", "--user-data-dir", os.path.expanduser("~/.job-applier-firefox")]
     else:
         args.append("--extension")
+        # One browser-tool server for the whole session (started below): every agent session connects
+        # to it, so Chrome asks the candidate to "Allow and select" the tab once, not once per session.
+        port = os.environ["PLAYWRIGHT_PORT"]
+        args.extend(["--port", port, "--shared-browser-context"])
+        import shlex
+        open("data/.playwright-serve.sh", "w").write(shlex.join([cfg["mcpServers"]["playwright"]["command"], *args]) + "\n")
+        cfg["mcpServers"]["playwright"] = {"type": "http", "url": f"http://localhost:{port}/mcp"}
 cfg["mcpServers"]["applier"]["env"]["APPLIER_ASSIST"] = "1"
 json.dump(cfg, open("data/.mcp-assist.json", "w"), indent=2)
 PY
 
 export MCP_TOOL_TIMEOUT=900000
+if [ -f data/.playwright-serve.sh ]; then
+  # The shared browser-tool server: it attaches to the candidate's Chrome once (one "Allow and select"),
+  # and every agent session after that connects to it instead of asking again.
+  bash data/.playwright-serve.sh > "data/logs/playwright-server.log" 2>&1 &
+  PW_PID=$!
+  trap 'kill $PW_PID 2>/dev/null; rm -f data/.mcp-assist.json data/.secrets.env data/.run_context.md data/.playwright-serve.sh "$ATTEMPTED"; save' EXIT
+  for _ in $(seq 60); do curl -s -o /dev/null "http://localhost:$PLAYWRIGHT_PORT/mcp" && break; sleep 1; done
+fi
 sweeps=0
 while :; do
 # Read the Handshake inbox for application links: at the start, then every 4th batch.
