@@ -74,9 +74,16 @@ def wait_for_account_verification(application_url: str, max_wait_minutes: int = 
     application_url: the current page URL, so the email can be matched to this site.
     """
     minutes = max(1, min(max_wait_minutes, 12))
-    if assist.enabled():
-        return assist.ask_verification(application_url, minutes)
-    return codes.describe_verification(codes.wait_for_verification(application_url, minutes), minutes)
+    # Tell the Gmail script an application is waiting, so it looks for the email now (it doesn't
+    # search Gmail while nothing is waiting).
+    req = codes.request_code(application_url.split("/")[2] if "//" in application_url else application_url,
+                             application_url) if codes.available() else None
+    try:
+        if assist.enabled():
+            return assist.ask_verification(application_url, minutes)
+        return codes.describe_verification(codes.wait_for_verification(application_url, minutes), minutes)
+    finally:
+        codes.cancel_request(req)
 
 
 @server.tool()

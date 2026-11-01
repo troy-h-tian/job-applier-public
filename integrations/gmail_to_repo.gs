@@ -10,10 +10,10 @@
 //                       "Contents: Read and write" permission.
 //   3. Editor → select the `install` function → Run → approve the permissions prompt.
 //      That syncs the last week of alerts now and then every 2 hours automatically, and checks
-//      every minute for verification codes the agent is waiting for, codes you approved by replying
+//      every minute (without touching Gmail unless the agent is waiting) for verification codes the agent is waiting for, codes you approved by replying
 //      "yes", and account-verification emails (see relayRequestedCodes, relayApprovedCodes and
 //      relayAccountVerifications below). It also marks "thank you for
-//      applying" receipts as read every minute (markReceiptsRead).
+//      applying" receipts as read every 30 minutes (markReceiptsRead).
 //   After pasting a newer version of this file, run `install` again to refresh the triggers.
 
 const REPO = 'troy-h-tian/job-applier';
@@ -112,6 +112,7 @@ function relayApprovedCodes() {
   const props = PropertiesService.getScriptProperties();
   const token = props.getProperty('GITHUB_TOKEN');
   if (!token) throw new Error('Add the GITHUB_TOKEN script property first (Project Settings → Script properties).');
+  if (!pendingRequests_(token).length) return; // only look while an application is waiting (Gmail quota)
   // Your addresses: the account's own plus send-as aliases. Each code email's recipients are added
   // below too, since Gmail replies from whichever address a message was sent to (e.g. a
   // university alias like name@school.edu on a name@g.school.edu account).
@@ -145,15 +146,15 @@ function relayApprovedCodes() {
 
 const REQUEST_MAX_AGE_MINUTES = 20;
 
-function relayRequestedCodes() {
-  const props = PropertiesService.getScriptProperties();
-  const token = props.getProperty('GITHUB_TOKEN');
-  if (!token) throw new Error('Add the GITHUB_TOKEN script property first (Project Settings → Script properties).');
+// The applications currently waiting for an email (data/code_requests/, filed by the agent for a
+// verification code or an account-verification link). Only GitHub is asked, never Gmail, so the
+// every-minute checks cost no Gmail quota while nothing is waiting.
+function pendingRequests_(token) {
   const listing = UrlFetchApp.fetch('https://api.github.com/repos/' + REPO + '/contents/data/code_requests', {
     headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' },
     muteHttpExceptions: true,
   });
-  if (listing.getResponseCode() !== 200) return; // no requests (the folder only exists while one is waiting)
+  if (listing.getResponseCode() !== 200) return []; // the folder only exists while a request is waiting
   const now = Date.now();
   const requests = [];
   for (const f of JSON.parse(listing.getContentText())) {
@@ -173,6 +174,14 @@ function relayRequestedCodes() {
       terms: (req.terms || []).map((s) => String(s).toLowerCase()).filter((s) => s.length >= 4),
     });
   }
+  return requests;
+}
+
+function relayRequestedCodes() {
+  const props = PropertiesService.getScriptProperties();
+  const token = props.getProperty('GITHUB_TOKEN');
+  if (!token) throw new Error('Add the GITHUB_TOKEN script property first (Project Settings → Script properties).');
+  const requests = pendingRequests_(token);
   if (!requests.length) return;
 
   const mine = new Set([Session.getEffectiveUser().getEmail()].concat(GmailApp.getAliases()).map(addr_));
@@ -242,6 +251,7 @@ function relayAccountVerifications() {
   const props = PropertiesService.getScriptProperties();
   const token = props.getProperty('GITHUB_TOKEN');
   if (!token) throw new Error('Add the GITHUB_TOKEN script property first (Project Settings → Script properties).');
+  if (!pendingRequests_(token).length) return; // only look while an application is waiting (Gmail quota)
   const relayed = new Set(JSON.parse(props.getProperty('RELAYED_VERIFY_IDS') || '[]'));
 
   // The log lines (Apps Script → Executions → the run) show what the relay saw, to diagnose problems.
@@ -340,10 +350,12 @@ function markStaleCodesRead() {
 function install() {
   PropertiesService.getScriptProperties().deleteProperty('RELAYED_VERIFY_IDS'); // retry emails skipped by older versions
   ScriptApp.getProjectTriggers().forEach((t) => ScriptApp.deleteTrigger(t));
-  ScriptApp.newTrigger('syncJobEmails').timeBased().everyHours(2).create();
+  // Gmail has a daily quota, so only the cheap GitHub check runs every minute; the three that read
+  // Gmail run only while the agent has a request waiting, and the housekeeping jobs run rarely.
+  ScriptApp.newTrigger('syncJobEmails').timeBased().everyHours(4).create();
   ScriptApp.newTrigger('relayApprovedCodes').timeBased().everyMinutes(1).create();
   ScriptApp.newTrigger('relayRequestedCodes').timeBased().everyMinutes(1).create();
   ScriptApp.newTrigger('relayAccountVerifications').timeBased().everyMinutes(1).create();
-  ScriptApp.newTrigger('markReceiptsRead').timeBased().everyMinutes(1).create();
+  ScriptApp.newTrigger('markReceiptsRead').timeBased().everyMinutes(30).create();
   syncJobEmails();
 }
