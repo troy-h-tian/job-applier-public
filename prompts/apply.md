@@ -142,6 +142,11 @@ employer link from the email: use it and skip to scoring. Otherwise, before scor
    it, then apply or skip. Always record with the lead's `id`, and record the employer URL you
    used as `url`.
 
+**Handshake "no permission" pages.** If a `joinhandshake.com` job page says "You don't have permission
+to view this job" (or is blank) even though the candidate is logged in, and the URL has `/public/jobs/`,
+open `https://app.joinhandshake.com/jobs/<the same number>` once instead. If that says it too, record
+`skipped` ("not visible to this account") and move on; don't retry further.
+
 ## Programs from curated lists (`"program": true`)
 
 These come from a curated list of internships, fellowships and insight programs for freshmen and

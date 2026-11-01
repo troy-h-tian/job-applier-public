@@ -360,6 +360,11 @@ def main():
 
     context = open(args.context_file).read()
     jobs = json.loads(QUEUE.read_text())
+    for job in jobs:
+        # Alert-email links to Handshake jobs are the logged-out "public" form, which says "You don't
+        # have permission to view this job" for jobs only shown to signed-in students, even in the
+        # candidate's own logged-in Chrome. The signed-in form of the same job is /jobs/<id>.
+        job["url"] = re.sub(r"^(https://app\.joinhandshake\.com)/public/jobs/", r"\1/jobs/", job.get("url") or "")
     dead = set()   # backends that failed in this batch
     misses = 0
     # JOBS_PER_SESSION jobs share one session. 1 (the default) keeps each job's pages out of the next
