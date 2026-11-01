@@ -3,6 +3,7 @@ browser on their Mac and does the steps the agent must never do itself, such as 
 CAPTCHA. Each request is a macOS dialog; the agent waits until they click Done or Skip."""
 
 import os
+import re
 import subprocess
 import sys
 import time
@@ -69,7 +70,18 @@ def _dialog_or_relay(message, kind, minutes, poll):
                 return "dialog", "timeout"
 
 
+# The candidate is only ever asked for a CAPTCHA, bot check or a login that needs 2FA. Emailed codes
+# and verification links come through the email relay (scripts/codes.py).
+NOT_FOR_CANDIDATE = re.compile(
+    r"(verification|security|one[- ]time|confirmation|email(ed)?|sign[- ]?in|login)\s+code|"
+    r"\b(enter|type|provide|paste)\b.{0,30}\bcode\b|verify (the |your )?(email|account|link)|verification (email|link)|link in (your|the) email", re.I)
+
+
 def ask(task, minutes):
+    if NOT_FOR_CANDIDATE.search(task) and not re.search(r"captcha|bot check|duo|2fa|two-factor|authenticator", task, re.I):
+        return ("Don't ask the candidate for emailed codes or verification links; they come from the email "
+                "relay automatically. If wait_for_approved_code / wait_for_account_verification found "
+                "nothing, record needs_human and move on.")
     result = _dialog(f"{task}\n\nDo it in the browser window, then click Done.", "plain", minutes)
     if result == "done":
         return ("The candidate clicked Done. Take a snapshot and check the page yourself: if the "

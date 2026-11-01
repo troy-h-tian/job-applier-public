@@ -106,7 +106,10 @@ read pages sparingly:
 
 - A CAPTCHA or bot check appears. Never attempt to solve or bypass one. Exception: if the run
   context says **assist mode**, the candidate is watching the browser, so instead call
-  `wait_for_candidate` and don't click anything while waiting. If they click Done, snapshot and
+  `wait_for_candidate` and don't click anything while waiting. That tool is only for a CAPTCHA or bot
+  check, or a login that needs 2FA (Duo, an authenticator app). Never use it for an emailed code or a
+  verification link: those come from `wait_for_approved_code` / `wait_for_account_verification`, and if
+  they return nothing you record `needs_human`. If they click Done, snapshot and
   finish (record `submitted` only if the confirmation appears); otherwise record `needs_human`.
 - An emailed verification code is required and `wait_for_approved_code` returns no code (see
   **Verification codes** below), or an SMS code is required.
