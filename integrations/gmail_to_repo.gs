@@ -10,8 +10,9 @@
 //                       "Contents: Read and write" permission.
 //   3. Editor → select the `install` function → Run → approve the permissions prompt.
 //      That syncs the last week of alerts now and then every 2 hours automatically, and checks
-//      for approved verification codes and account-verification emails every minute
-//      (see relayApprovedCodes and relayAccountVerifications below). It also marks "thank you for
+//      every minute for verification codes the agent is waiting for, codes you approved by replying
+//      "yes", and account-verification emails (see relayRequestedCodes, relayApprovedCodes and
+//      relayAccountVerifications below). It also marks "thank you for
 //      applying" receipts as read every minute (markReceiptsRead).
 //   After pasting a newer version of this file, run `install` again to refresh the triggers.
 
@@ -136,6 +137,60 @@ function relayApprovedCodes() {
   props.setProperty('RELAYED_CODE_IDS', JSON.stringify(Array.from(relayed).slice(-200)));
 }
 
+// Codes the agent is waiting for. When the agent reaches a "we emailed you a code" screen it files a
+// short-lived request in data/code_requests/ (the company, and words from the company and the site it
+// is applying on). This relays a code email only if it arrives after such a request, within 20
+// minutes, and one of the request's words appears in its sender, subject or opening text. So your
+// other code emails (banks, logins, other sites) are never copied, and nothing is asked of you.
+
+const REQUEST_MAX_AGE_MINUTES = 20;
+
+function relayRequestedCodes() {
+  const props = PropertiesService.getScriptProperties();
+  const token = props.getProperty('GITHUB_TOKEN');
+  if (!token) throw new Error('Add the GITHUB_TOKEN script property first (Project Settings → Script properties).');
+  const listing = UrlFetchApp.fetch('https://api.github.com/repos/' + REPO + '/contents/data/code_requests', {
+    headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json' },
+    muteHttpExceptions: true,
+  });
+  if (listing.getResponseCode() !== 200) return; // no requests (the folder only exists while one is waiting)
+  const now = Date.now();
+  const requests = [];
+  for (const f of JSON.parse(listing.getContentText())) {
+    if (!/\.json$/.test(f.name)) continue;
+    const res = UrlFetchApp.fetch(f.url, {
+      headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github.raw+json' },
+      muteHttpExceptions: true,
+    });
+    if (res.getResponseCode() !== 200) continue;
+    let req;
+    try { req = JSON.parse(res.getContentText()); } catch (e) { continue; }
+    const at = new Date(req.requested_at).getTime();
+    if (!at || now - at > REQUEST_MAX_AGE_MINUTES * 60 * 1000) continue;
+    requests.push({
+      at: at,
+      company: String(req.company || ''),
+      terms: (req.terms || []).map((s) => String(s).toLowerCase()).filter((s) => s.length >= 4),
+    });
+  }
+  if (!requests.length) return;
+
+  const mine = new Set([Session.getEffectiveUser().getEmail()].concat(GmailApp.getAliases()).map(addr_));
+  const relayed = new Set(JSON.parse(props.getProperty('RELAYED_CODE_IDS') || '[]'));
+  for (const thread of GmailApp.search(CODE_QUERY + ' in:anywhere', 0, 20)) {
+    for (const msg of thread.getMessages()) {
+      if (relayed.has(msg.getId()) || mine.has(addr_(msg.getFrom()))) continue;
+      const when = msg.getDate().getTime();
+      const haystack = (msg.getFrom() + ' ' + msg.getSubject() + ' ' + msg.getPlainBody().slice(0, 3000)).toLowerCase();
+      const match = requests.find((r) => when >= r.at - 2 * 60 * 1000 && r.terms.some((term) => haystack.indexOf(term) >= 0));
+      if (!match) continue;
+      relayCode_(token, msg, "Matched the agent's request for " + match.company);
+      relayed.add(msg.getId());
+    }
+  }
+  props.setProperty('RELAYED_CODE_IDS', JSON.stringify(Array.from(relayed).slice(-200)));
+}
+
 // "Jane Doe <JDoe+tag@School.edu>" -> "jdoe@school.edu". The +tag is dropped because Gmail delivers
 // name+anything@ to name@, so replies sent from a +tag address (e.g. a canned-response
 // template) are still yours.
@@ -144,12 +199,12 @@ function addr_(s) {
   return (m ? m[1] : String(s)).trim().toLowerCase().replace(/\+[^@]*@/, '@');
 }
 
-function relayCode_(token, codeMsg) {
+function relayCode_(token, codeMsg, approval) {
   const text = [
     'From: ' + codeMsg.getFrom(),
     'Date: ' + codeMsg.getDate().toISOString(),
     'Subject: ' + codeMsg.getSubject(),
-    'Approved: candidate replied "yes"',
+    'Approved: ' + (approval || 'candidate replied "yes"'),
     '',
     codeMsg.getPlainBody().slice(0, 5000),
   ].join('\n');
@@ -287,6 +342,7 @@ function install() {
   ScriptApp.getProjectTriggers().forEach((t) => ScriptApp.deleteTrigger(t));
   ScriptApp.newTrigger('syncJobEmails').timeBased().everyHours(2).create();
   ScriptApp.newTrigger('relayApprovedCodes').timeBased().everyMinutes(1).create();
+  ScriptApp.newTrigger('relayRequestedCodes').timeBased().everyMinutes(1).create();
   ScriptApp.newTrigger('relayAccountVerifications').timeBased().everyMinutes(1).create();
   ScriptApp.newTrigger('markReceiptsRead').timeBased().everyMinutes(1).create();
   syncJobEmails();

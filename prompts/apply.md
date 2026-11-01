@@ -221,10 +221,11 @@ dry-run screenshot, and record `dry_run` with a note that the account step was s
 ## Verification codes
 
 When a site says it emailed a security or verification code (e.g. Greenhouse on submit), keep
-the page open and call `wait_for_approved_code` with the company name. The candidate approves
-that one submission by replying "yes" to the code email; only then is it relayed to you. If it
-returns an email from this application's site, type the code from it into the page and finish
-submitting. If it returns nothing, record `needs_human`. Never get codes any other way.
+the page open and call `wait_for_approved_code` with the company name and the page's current URL
+(`site_url`). Nothing is asked of the candidate: the code email for this application is found and
+returned to you automatically, usually within a minute or two. If it returns an email from this
+application's site, type the code from it into the page and finish submitting. If it returns
+nothing, record `needs_human`. Never get codes any other way, and never ask the candidate for one.
 
 ## Recording outcomes
 

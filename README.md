@@ -98,10 +98,15 @@ pasting a newer version, run `install` again to refresh the triggers.
 
 ## Emailed verification codes and account links
 
-Some sites (often Greenhouse) email a security code before accepting an application. Replying
-**"yes"** to that email approves that one submission: the Apps Script relays only that email
-into `data/codes/`, the waiting agent enters the code and submits, and the relayed copy is
-deleted. Codes without a "yes" reply are never relayed. CAPTCHAs are never attempted.
+Some sites (often Greenhouse) email a security code before accepting an application. When the agent
+reaches that screen it files a short-lived request in `data/code_requests/` (the company, and words
+from the company and the site). The Apps Script (`relayRequestedCodes`, every minute) relays a code
+email into `data/codes/` only if it arrives after such a request, within 20 minutes, and one of the
+request's words appears in its sender, subject or opening text. The waiting agent enters the code and
+submits, and the relayed copy is deleted. Nothing is asked of the candidate, and code emails that
+match no request (banks, logins, other sites) are never copied. Replying **"yes"** to a code email
+still relays it by hand. CAPTCHAs are never attempted. After changing `gmail_to_repo.gs`, paste it
+into each Apps Script project and run `install` again.
 
 When the agent creates a candidate account itself, the site may email a "verify your account"
 link. Those emails are relayed automatically (no reply needed) into `data/verify/`. The agent
@@ -127,8 +132,8 @@ turn on "Allow access to file URLs" for it, and approve the tab when Chrome asks
 15 until the queue is empty or it's stopped. It may open LinkedIn, Handshake, Indeed and WayUp
 only in this mode, only for the job in the queue, and never logs in. Whenever a CAPTCHA, Duo
 prompt or other check comes up, a dialog beeps and asks the candidate to do that step and click
-Done (or Skip). A security code the candidate already approved with "yes", or an account link,
-is picked up from the relay automatically instead of asking. Results are saved and pushed after
+Done (or Skip). Security codes and account-verification links are picked up from the
+email relay automatically; the candidate is never asked for them. Results are saved and pushed after
 every batch and whenever the session stops, and it keeps the Mac awake while a batch runs. It
 stops if two jobs in a row record nothing (for example, no API credit). `--firefox` uses a separate
 Firefox window instead (untested).
