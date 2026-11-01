@@ -44,16 +44,16 @@ def record_outcome(
 
 
 @server.tool()
-def wait_for_approved_code(company: str, max_wait_minutes: int = 10, site_url: str = "") -> str:
+def wait_for_approved_code(company: str, max_wait_minutes: int = 5, site_url: str = "") -> str:
     """Call this when an application site says it emailed a security/verification code.
 
     Nothing is asked of the candidate: the Gmail relay picks out the code email for this
     application (it must arrive after you call this and mention the company or the site) and it is
-    returned here. Waits up to max_wait_minutes (max 12) and returns the email(s), or a message
-    saying none arrived, in which case record needs_human.
+    returned here, normally within a minute or two. Waits up to max_wait_minutes (max 6) and returns
+    the email(s), or a message saying none arrived, in which case record needs_human.
     company: the employer. site_url: the application page's current URL, which helps match the email.
     """
-    minutes = max(1, min(max_wait_minutes, 12))
+    minutes = max(1, min(max_wait_minutes, 6))
     if not codes.available():
         return codes.describe(None, minutes)
     req = codes.request_code(company, site_url)
