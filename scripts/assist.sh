@@ -160,12 +160,12 @@ if os.environ.get("MY_BROWSER") == "1":
         args += ["--browser", "firefox", "--user-data-dir", os.path.expanduser("~/.job-applier-firefox")]
     else:
         args.append("--extension")
-        # One browser-tool server for the whole session (started below): every agent session connects
-        # to it, so Chrome asks the candidate to "Allow and select" the tab once, not once per session.
+        # One shared connection to Chrome for the whole session (scripts/browser_proxy.py, started below):
+        # every agent session goes through it, so Chrome asks the candidate to "Allow and select" once.
         port = os.environ["PLAYWRIGHT_PORT"]
-        args.extend(["--port", port, "--shared-browser-context"])
         import shlex
-        open("data/.playwright-serve.sh", "w").write(shlex.join([cfg["mcpServers"]["playwright"]["command"], *args]) + "\n")
+        open("data/.playwright-serve.sh", "w").write("exec " + shlex.join(
+            ["python3", "scripts/browser_proxy.py", "--port", port, "--", cfg["mcpServers"]["playwright"]["command"], *args]) + "\n")
         cfg["mcpServers"]["playwright"] = {"type": "http", "url": f"http://localhost:{port}/mcp"}
 cfg["mcpServers"]["applier"]["env"]["APPLIER_ASSIST"] = "1"
 json.dump(cfg, open("data/.mcp-assist.json", "w"), indent=2)
