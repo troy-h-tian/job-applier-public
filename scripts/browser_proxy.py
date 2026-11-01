@@ -11,6 +11,7 @@ session, so Chrome is asked once.
 
 import argparse
 import asyncio
+import re
 import sys
 
 import uvicorn
@@ -36,9 +37,22 @@ async def main():
                 async with lock:
                     return await upstream.list_tools()
 
+            def refuse(text):
+                return types.CallToolResult(content=[types.TextContent(type="text", text=text)])
+
             async def call_tool(ctx, params: types.CallToolRequestParams):
+                args = params.arguments or {}
                 async with lock:
-                    return await upstream.call_tool(params.name, params.arguments or {})
+                    # Closing the browser, or the last tab, drops the connection to Chrome and the
+                    # candidate would have to click "Allow and select" again. Never let that through.
+                    if params.name == "browser_close":
+                        return refuse("Not needed: the browser stays open between jobs. Navigate this tab to the next page instead.")
+                    if params.name == "browser_tabs" and args.get("action") == "close":
+                        listing = await upstream.call_tool("browser_tabs", {"action": "list"})
+                        text = " ".join(c.text for c in listing.content if getattr(c, "text", None))
+                        if len(re.findall(r"(?m)^\s*-?\s*\d+:", text)) <= 1:
+                            return refuse("Not closed: this is the only tab, and closing it would disconnect the browser. Navigate it instead.")
+                    return await upstream.call_tool(params.name, args)
 
             server = Server("browser-proxy", on_list_tools=list_tools, on_call_tool=call_tool)
             config = uvicorn.Config(server.streamable_http_app(), host="127.0.0.1", port=a.port, log_level="warning")

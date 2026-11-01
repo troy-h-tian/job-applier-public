@@ -275,6 +275,8 @@ immediately. Otherwise continue until the queue is exhausted.
   an explicit `work_authorization.us_citizen` value (or other explicit profile field). If that
   value is blank and the question is required, stop and record `needs_human`, quoting the question.
 - Represent the candidate truthfully. If unsure whether something is true, leave it out.
-- Close the browser tab when done with a job, and keep going after one job fails. A single
-  broken site shouldn't end the run.
+- Never call `browser_close`, and never close the last tab. In the candidate's own Chrome, closing the
+  tab (or the browser) cuts the connection and they must approve a tab again. When done with a job,
+  close only extra tabs you opened for it, and navigate the remaining tab to the next page. Keep going
+  after one job fails. A single broken site shouldn't end the run.
 - End with a one- or two-line summary: the outcome and anything the candidate should know.
