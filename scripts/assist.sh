@@ -53,7 +53,7 @@ export ATTEMPTED=data/.assist_attempted
 build_queue() { python3 - "$@" <<'PY'
 import json, re, sys
 sys.path.insert(0, "scripts")
-from common import QUEUE, load_applications
+from common import DATA, QUEUE, load_applications
 
 import os
 args, max_jobs, list_only = sys.argv[1:], 15, False
@@ -78,20 +78,33 @@ lead_ids = set()
 if my_browser and not args:
     # Then email-alert leads whose employer posting wasn't found: each is a job on LinkedIn,
     # Handshake, Indeed or WayUp. Newest first; the email's own link is used when it was kept.
-    from common import DATA
     leads = {l["id"]: l for l in json.loads((DATA / "leads.json").read_text())}
     lead_ids = {i for i, r in latest.items()
                 if i in leads and r["status"] == "skipped" and "not found" in r["reason"].lower()}
     ids += sorted(lead_ids, key=lambda i: latest[i]["at"], reverse=True)
     for i in lead_ids:
         latest[i] = {**latest[i], "url": leads[i].get("alert_url") or "", "notes": ""}
+hs_ids = []
+if my_browser and not args:
+    # Application links found in the Handshake inbox (scripts/inbox_sweep.py) that haven't been tried.
+    try:
+        links = json.loads((DATA / "handshake_inbox.json").read_text())["links"]
+    except (FileNotFoundError, ValueError, KeyError):
+        links = {}
+    for i, l in links.items():
+        if i not in latest:
+            latest[i] = {"at": "9999", "company": l["company"] or "Handshake message", "title": l["title"] or "(from a Handshake message)",
+                         "url": l["url"], "reason": "", "notes": ""}
+            hs_ids.append(i)
+    lead_ids |= set(hs_ids)
+    ids = hs_ids + ids
 attempted = set(open(os.environ["ATTEMPTED"]).read().split()) if os.path.exists(os.environ["ATTEMPTED"]) else set()
 ids = [i for i in ids if i not in attempted]
 if list_only:
     for i in ids:
         r = latest[i]
         print(f"{r['at'][:10]}  {r['company']}: {r['title']} ({i})", file=sys.stderr)
-    print(f"{len(ids)} job(s) waiting ({len(lead_ids)} of them email-alert jobs for your browser).", file=sys.stderr)
+    print(f"{len(ids)} job(s) waiting ({len(lead_ids)} of them email-alert or Handshake-message jobs for your browser).", file=sys.stderr)
     print("list")
     sys.exit()
 queue = []
@@ -149,7 +162,15 @@ json.dump(cfg, open("data/.mcp-assist.json", "w"), indent=2)
 PY
 
 export MCP_TOOL_TIMEOUT=900000
+sweeps=0
 while :; do
+# Read the Handshake inbox for application links: at the start, then every 4th batch.
+if [ "$MY_BROWSER" = 1 ] && [ "${NO_INBOX:-0}" != 1 ] && [ $((sweeps % 4)) = 0 ]; then
+  python3 scripts/inbox_sweep.py --mcp-config data/.mcp-assist.json --log "data/logs/$(date -u +%Y-%m-%d).log" || true
+  list=$(build_queue "$@")
+  [ "$list" = 0 ] && break
+fi
+sweeps=$((sweeps + 1))
 cat > data/.run_context.md <<EOF
 - Mode: submit, **assist mode**: the candidate is watching the browser window and will do any
   CAPTCHA, security code or account verification by hand when you ask (see the tools).
@@ -165,7 +186,9 @@ $( [ "$MY_BROWSER" = 1 ] && echo "- **my-browser mode**: the browser is the cand
   there is one, otherwise a search for the company and title. Use the site's own apply flow (Easy
   Apply, Handshake apply) or follow its link to the employer's page. Work at a human pace, one job
   at a time. Never log in, and never touch a CAPTCHA, Duo prompt or other verification: use
-  \`wait_for_candidate\`. Don't open anything else (feeds, messages, profiles, other jobs). If the
+  \`wait_for_candidate\`. Don't open anything else (feeds, messages, profiles, other jobs). Jobs whose
+  id starts with \`hs:\` came from a link in the candidate's Handshake messages: \`url\` is that
+  link, so go straight to it. If the
   job can't be found or is closed, record \`skipped\` (\"not found\" or \"closed\") as usual." )
 EOF
 

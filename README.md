@@ -136,6 +136,13 @@ Firefox window instead (untested).
 It uses the `claude` login (subscription). `USE_API_KEY=1` uses the API key in
 `~/.config/job-applier/env` (`ANTHROPIC_API_KEY=...`, kept outside the repo) instead.
 
+At the start of `--my-browser` and then every 4th batch, an inbox sweep (`scripts/inbox_sweep.py`,
+`prompts/handshake_inbox.md`) reads every message in the candidate's Handshake inbox and records only
+links that open an application for a specific job (`data/handshake_inbox.json`); event, Q&A, info
+session, survey and other links are ignored, nothing is replied to or clicked, and links aren't
+followed during the sweep. The recorded links are queued first, as `hs:` jobs, and applied to like any
+other. Messages already looked at are skipped next time. `NO_INBOX=1` turns the sweep off.
+
 `scripts/update_profiles.sh` uses the same setup to bring the candidate's Handshake, WayUp and
 Indeed profiles in line with `resume.md` (`prompts/update_profiles.md`): it adds what's missing and
 corrects what contradicts the resume, keeps true extra details, uploads the resume PDF, and never

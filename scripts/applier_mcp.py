@@ -2,6 +2,7 @@
 approved and account-verification links) so it never needs a shell."""
 
 import datetime as dt
+import hashlib
 import json
 import os
 import subprocess
@@ -85,6 +86,51 @@ def wait_for_candidate(task: str, max_wait_minutes: int = 10) -> str:
     if not assist.enabled():
         return "Not in assist mode: nobody is watching the browser. Record needs_human."
     return assist.ask(task, minutes)
+
+
+HANDSHAKE_INBOX = DATA / "handshake_inbox.json"   # {"seen": {message key: when}, "links": {job id: link}}
+
+
+def _inbox_state():
+    try:
+        return json.loads(HANDSHAKE_INBOX.read_text())
+    except (FileNotFoundError, ValueError):
+        return {"seen": {}, "links": {}}
+
+
+@server.tool()
+def inbox_seen() -> str:
+    """Handshake inbox sweep only: the keys of the messages already looked at in earlier sweeps, as a
+    JSON list. Skip those messages."""
+    return json.dumps(sorted(_inbox_state()["seen"]))
+
+
+@server.tool()
+def inbox_record(message_key: str, application_links: list[dict] | None = None) -> str:
+    """Handshake inbox sweep only: record that you looked at one message, and any APPLICATION links in
+    it. Call once per message, also when it has none.
+
+    message_key: the sender, the date and the first words of the message, enough to tell it apart
+      from others, e.g. "Acme Recruiting | Oct 29 | Hi Troy, we'd love you to apply".
+    application_links: for each link that opens an application for a specific job or internship
+      (the employer's own application page, an ATS such as Greenhouse, Lever, Ashby or Workday, or a
+      Handshake job's apply page): {"url": ..., "company": ..., "title": ...}. Never links for events,
+      info sessions, Q&A, webinars, surveys, newsletters, profile or account pages, or anything else.
+    """
+    state = _inbox_state()
+    added = []
+    for link in application_links or []:
+        url = str(link.get("url") or "").strip()
+        if not url.startswith(("http://", "https://")):
+            continue
+        job_id = "hs:" + hashlib.sha1(url.split("#")[0].encode()).hexdigest()[:12]
+        if job_id not in state["links"]:
+            state["links"][job_id] = {"url": url, "company": str(link.get("company") or "")[:100],
+                                      "title": str(link.get("title") or "")[:200]}
+            added.append(job_id)
+    state["seen"][message_key[:300]] = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
+    HANDSHAKE_INBOX.write_text(json.dumps(state, indent=1))
+    return f"Recorded; {len(added)} new application link(s)."
 
 
 @server.tool()

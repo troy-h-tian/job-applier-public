@@ -129,8 +129,8 @@ jobs:
           CLAUDE_MODEL: ${{ vars.CLAUDE_MODEL || 'sonnet' }}
           MAX_BUDGET_USD: ${{ vars.MAX_BUDGET_USD }}   # optional per-job spending cap
           MAX_BATCHES_PER_RUN: ${{ inputs.max_batches || vars.MAX_BATCHES_PER_RUN || '0' }}   # 0 = until the queue or every backend runs out
-          USAGE_CAP_5H_USD: ${{ vars.USAGE_CAP_5H_USD || '10' }}   # estimated usage caps, see scripts/usage_guard.py
-          USAGE_CAP_WEEK_USD: ${{ vars.USAGE_CAP_WEEK_USD || '120' }}
+          USAGE_CAP_5H_USD: ${{ vars.USAGE_CAP_5H_USD }}   # optional; defaults and a temporary override: scripts/usage_guard.py
+          USAGE_CAP_WEEK_USD: ${{ vars.USAGE_CAP_WEEK_USD }}
           APPLIER_MODE: ${{ inputs.mode == 'config' && '' || inputs.mode }}
           PUBLIC_LOGS: "1"   # agent output goes to private/data/logs/, not this log
         run: scripts/run.sh
