@@ -197,7 +197,8 @@ echo "### $(date -u +%H:%MZ) assist" >> "$log"
 # One fresh Claude session per job (scripts/agent.py); caffeinate keeps the Mac from idle-sleeping
 # meanwhile (closing the lid still sleeps it).
 status=0
-python3 scripts/agent.py --mcp-config data/.mcp-assist.json --tools Read --context-file data/.run_context.md \
+# 5 jobs per session: each new session makes Chrome ask the candidate to "Allow and select" the tab again.
+JOBS_PER_SESSION="${JOBS_PER_SESSION:-5}" python3 scripts/agent.py --mcp-config data/.mcp-assist.json --tools Read --context-file data/.run_context.md \
   --log "$log" --echo --caffeinate || status=$?
 
 # One batch unless in my-browser mode; there, keep going until nothing is left (or it's stopped).

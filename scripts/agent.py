@@ -68,11 +68,15 @@ def candidate_files():
     return "\n\n".join(f"### `{name}`\n\n````\n{text.strip()}\n````" for name, text in files)
 
 
-def build_prompt(context, job):
-    # Everything before "## This job" is identical across the batch's sessions, so it's cached.
+def build_prompt(context, jobs):
+    """jobs: one job (a dict) or several, for a session that works through all of them."""
+    many = isinstance(jobs, list) and len(jobs) > 1
+    head = ("## These jobs\n\nWork through them in order, recording each one before starting the next."
+            if many else "## This job")
+    # Everything before the jobs is identical across the batch's sessions, so it's cached.
     return (f"{PROMPT.read_text()}\n\n## Candidate files\n\n{candidate_files()}\n\n"
             f"## Run context\n{context.strip()}\n\n"
-            f"## This job\n\n```json\n{json.dumps(job, indent=2)}\n```\n"
+            f"{head}\n\n```json\n{json.dumps(jobs, indent=2)}\n```\n"
             f"- Current UTC time: {dt.datetime.now(dt.timezone.utc):%Y-%m-%dT%H:%MZ}\n")
 
 
@@ -358,38 +362,54 @@ def main():
     jobs = json.loads(QUEUE.read_text())
     dead = set()   # backends that failed in this batch
     misses = 0
-    for n, job in enumerate(jobs, 1):
+    # JOBS_PER_SESSION jobs share one session. 1 (the default) keeps each job's pages out of the next
+    # one's context; assist uses more, since every new session reconnects to the candidate's Chrome and
+    # makes them click "Allow and select" again.
+    per = max(1, int(os.environ.get("JOBS_PER_SESSION", "1")))
+    done_jobs = 0
+    for start in range(0, len(jobs), per):
+        chunk = jobs[start:start + per]
         before = len(load_applications())
-        QUEUE.write_text(json.dumps([job], indent=2))   # what data/queue.json means in the prompt
-        results = run_chain(build_prompt(context, job), args, dead, done=lambda: recorded(job, before))
+        QUEUE.write_text(json.dumps(chunk, indent=2))   # what data/queue.json means in the prompt
+        ids = [j["id"] for j in chunk]
+
+        def done():
+            seen = {a["id"] for a in load_applications()[before:]}
+            return all(i in seen for i in ids)
+
+        results = run_chain(build_prompt(context, chunk if per > 1 else chunk[0]), args, dead, done=done)
         if not results:
             print("No backend can take the next job; stopping.", file=sys.stderr)
             return 5
+        label = ",".join(ids)
         for r in results:
-            row = log_usage(r, args.batch, job["id"])
+            row = log_usage(r, args.batch, label)
             cost = f"${row['cost_usd'] or 0:.2f}, " if r["backend"] == "claude" else ""
-            print(f"  job {n}/{len(jobs)} ({r['backend']}): {cost}{row['minutes']} min, {row['turns']} turns",
+            print(f"  jobs {done_jobs + 1}-{done_jobs + len(chunk)}/{len(jobs)} ({r['backend']}): {cost}{row['minutes']} min, {row['turns']} turns",
                   file=sys.stderr)
             if args.log:
                 with open(args.log, "a") as f:
-                    f.write(f"#### {job['id']} ({r['backend']})\n{r['text']}\n")
+                    f.write(f"#### {label} ({r['backend']})\n{r['text']}\n")
             if args.echo or not args.log:
                 print(r["text"], file=sys.stderr)
+        done_jobs += len(chunk)
         r = results[-1]
 
         if r["backend"] == "claude" and r.get("limited"):
             print("Claude reported a usage limit.", file=sys.stderr)
             return 2
-        if not recorded(job, before):
+        seen = {a["id"] for a in load_applications()[before:]}
+        for job in chunk:
+            if job["id"] in seen:
+                misses = 0
+                continue
             # Retried at most once more (an id is retired after two errors).
             record(job["id"], "error", job.get("company", ""), job.get("title", ""), job.get("url", ""),
                    "The agent's session ended without recording an outcome.", notes=r["text"][-300:])
             misses += 1
             if misses >= 2:
-                print("Two sessions in a row recorded nothing; stopping.", file=sys.stderr)
+                print("Two jobs in a row recorded nothing; stopping.", file=sys.stderr)
                 return 3
-        else:
-            misses = 0
         if remaining() == 0:
             print("Application limit reached.", file=sys.stderr)
             return 4
