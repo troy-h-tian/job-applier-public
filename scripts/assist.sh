@@ -160,6 +160,12 @@ if os.environ.get("MY_BROWSER") == "1":
         args += ["--browser", "firefox", "--user-data-dir", os.path.expanduser("~/.job-applier-firefox")]
     else:
         args.append("--extension")
+        # Name Chrome's executable. Without it the tool reads Chrome's profile folder to check that the
+        # extension is installed, which newer macOS blocks for this process, and it then wrongly shows
+        # the "install the extension" page. Given the path, it skips that check.
+        chrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+        if os.path.exists(chrome):
+            args.extend(["--executable-path", chrome])
         # One shared connection to Chrome for the whole session (scripts/browser_proxy.py, started below):
         # every agent session goes through it, so Chrome asks the candidate to "Allow and select" once.
         port = os.environ["PLAYWRIGHT_PORT"]
