@@ -121,6 +121,8 @@ Mac (in Claude Code, ask to "restart the live session": the `captcha-assist` ski
 
 ```bash
 scripts/assist.sh --my-browser          # the whole queue, in the candidate's own Chrome
+scripts/assist_bg.sh start --my-browser   # the same, detached so it survives the terminal or editor closing
+scripts/assist_bg.sh status | stop
 scripts/assist.sh --my-browser --list   # what's waiting
 scripts/assist.sh                       # just the CAPTCHA jobs, in a separate visible browser
 ```

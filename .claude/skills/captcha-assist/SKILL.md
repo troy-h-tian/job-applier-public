@@ -21,9 +21,12 @@ this session.** The candidate does that step; the script's own agent does everyt
 
 1. Run `scripts/assist.sh --my-browser --list` from the repo root and tell the user how many jobs
    are waiting.
-2. Start it right away with `run_in_background`: `scripts/assist.sh --my-browser` (add `--max N`
-   only if the user gave a number or time limit; use `--firefox` only if they ask). The script
-   itself handles running inside Claude Code, keeping the Mac awake and saving results.
+2. Start it right away, detached from this session: `scripts/assist_bg.sh start --my-browser` (add
+   `--max N` only if the user gave a number or time limit; use `--firefox` only if they ask; set
+   `NO_INBOX=1` to skip the Handshake inbox sweep). Never start it as a background job of this session:
+   those are killed when the session ends, mid-form. `scripts/assist_bg.sh status` shows whether it is
+   running and `scripts/assist_bg.sh stop` stops it (it saves its results first). The script itself
+   handles keeping the Mac awake and saving results.
 3. Tell the user, briefly, what to do on their side: in Chrome, when the Playwright Extension asks
    which tab to allow, choose the job-application tab it opened ("Allow & select"); a dialog
    beeps whenever a CAPTCHA or code needs them; Skip moves on. If the first line of the output is
