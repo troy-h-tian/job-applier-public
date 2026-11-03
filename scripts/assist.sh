@@ -142,6 +142,18 @@ trap 'rm -f data/.mcp-assist.json data/.secrets.env data/.run_context.md "$ATTEM
 trap 'exit 130' INT TERM
 
 mkdir -p data/screenshots data/logs
+# The candidate-account password lives in GitHub's secrets for scheduled runs; here it comes from the
+# environment or a WORKDAY_PASSWORD=... line in ~/.config/job-applier/env (outside the repo, never
+# committed). Without it every site that needs an account is typed the placeholder word and fails.
+if [ -z "${WORKDAY_PASSWORD:-}" ] && [ -f "$HOME/.config/job-applier/env" ]; then
+  WORKDAY_PASSWORD=$(sed -n 's/^WORKDAY_PASSWORD=//p' "$HOME/.config/job-applier/env" | head -1 | sed -e "s/^['\"]//" -e "s/['\"]$//")
+  export WORKDAY_PASSWORD
+fi
+if [ -z "${WORKDAY_PASSWORD:-}" ]; then
+  echo "WARNING: no WORKDAY_PASSWORD (add WORKDAY_PASSWORD='...' to ~/.config/job-applier/env): jobs that need an account will fail." >&2
+elif [[ "$WORKDAY_PASSWORD" == *"'"* ]]; then
+  echo "WORKDAY_PASSWORD must not contain a single quote (')." >&2; exit 1
+fi
 ( umask 077; printf "WORKDAY_PASSWORD='%s'\n" "${WORKDAY_PASSWORD:-}" > data/.secrets.env )
 date -u +%Y-%m-%dT%H:%M:%S+00:00 > data/.run_started_at
 # Same tools as a normal run, but with a visible browser and the assist dialogs turned on.
