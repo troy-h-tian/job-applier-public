@@ -103,6 +103,7 @@ def request_code(company, site_url=""):
     terms = sorted(set(words + labels))
     if not terms:
         return None
+    prune_requests()
     now = dt.datetime.now(dt.timezone.utc)
     body = {"company": company, "terms": terms, "requested_at": now.isoformat(timespec="seconds")}
     path = f"data/code_requests/{int(now.timestamp())}-{re.sub(r'[^a-z0-9]+', '-', company.lower())[:30]}.json"
@@ -112,6 +113,22 @@ def request_code(company, site_url=""):
         return path, res["content"]["sha"]
     except Exception:
         return None
+
+
+def prune_requests(max_age_minutes=30):
+    """Delete code requests whose run died before cancelling them (the Gmail script ignores them anyway)."""
+    try:
+        listing = _request("GET", "data/code_requests")
+    except Exception:
+        return
+    now = time.time()
+    for f in listing:
+        m = re.match(r"(\d+)-", f["name"])
+        if m and now - int(m.group(1)) > max_age_minutes * 60:
+            try:
+                _request("DELETE", f["path"], {"message": "Drop an old code request", "sha": f["sha"]})
+            except Exception:
+                pass
 
 
 def cancel_request(req):
