@@ -206,13 +206,14 @@ whole conversation, so the cost is mostly context size times turns.
 - `KEEP_SESSIONS=1` keeps the session transcripts (in `~/.claude/projects/`) for looking into
   where a costly job's tokens went.
 
-### Gemini and Codex first, then Claude
+### Codex first, then Claude (Gemini optional)
 
 Each job runs on the first backend in the list that is installed, signed in and under its usage
 limit, with Claude as the last resort. All get the same prompt and browser tools.
 
-- **On the candidate's Mac** (assist, local runs, the profile update): Gemini, then Codex, then Claude.
-- **In GitHub Actions:** Codex, then Claude (no Gemini login there). `BACKENDS` overrides the list.
+- **Everywhere** (assist, local runs, the profile update, GitHub Actions): Codex, then Claude. Gemini is
+  still wired in but off by default (the candidate's Google plan ended); `BACKENDS=gemini,codex` puts it
+  first again, on the Mac only (GitHub has no Gemini login). `BACKENDS` overrides the list.
 
 1. **Gemini** (the Google AI plan): `brew install --cask antigravity-cli`, then run `agy` once to
    sign in. `agy` can't switch off its own shell and file tools, so each session runs with a

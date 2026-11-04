@@ -1,8 +1,8 @@
 """Run the application agent on the jobs in data/queue.json, one fresh session per job.
 
-Each job goes to the first available backend in BACKENDS, then to Claude: Gemini (the candidate's
-Google plan, via the Antigravity CLI `agy`) then Codex (their ChatGPT plan, via `codex login`) on
-the candidate's Mac, Codex alone in GitHub Actions. A backend that isn't installed or signed in, or
+Each job goes to the first available backend in BACKENDS, then to Claude: by default Codex (the
+candidate's ChatGPT plan, via `codex login`) alone, on the Mac and in GitHub Actions. Gemini (a Google
+plan, via the Antigravity CLI `agy`) can go first with BACKENDS=gemini,codex. A backend that isn't installed or signed in, or
 is under its usage limit, is skipped; one that reports a limit is paused until it resets
 (data/.paused_<name>). USE_CODEX=0 / USE_GEMINI=0 turn one off; with none left, Claude does it.
 
@@ -314,9 +314,9 @@ def recorded(job, before):
 
 
 def backend_order():
-    """BACKENDS (comma-separated) before Claude; default gemini,codex, or just codex in GitHub Actions
-    (which has no Gemini login)."""
-    default = "codex" if os.environ.get("GITHUB_ACTIONS") else "gemini,codex"
+    """BACKENDS (comma-separated) before Claude; default just codex, everywhere. Gemini is still wired
+    in (BACKENDS=gemini,codex, with `agy` signed in) for when the candidate has a Google plan again."""
+    default = "codex"
     return [n for n in os.environ.get("BACKENDS", default).replace(" ", "").split(",") if n in ("codex", "gemini")]
 
 
