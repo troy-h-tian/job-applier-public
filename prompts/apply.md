@@ -79,6 +79,8 @@ read pages sparingly:
      values page on the company's own site). Connect one or two of those, in your own words, to
      specific items in `resume.md`. Never quote their slogans back at them, and never invent
      personal reasons; the connection must come from the candidate's actual work.
+   - If a field needs a cover letter as a FILE upload, write the letter as below, then call
+     `make_cover_letter` with its text and upload the PDF it returns (never skip a required cover letter).
    - Free-text questions ("Why are you interested?", cover letter): write 2-5 specific,
      plain sentences connecting the role to concrete items in `resume.md`, following
      `config/writing_style.md`. Check the draft against its banned lists and rewrite any

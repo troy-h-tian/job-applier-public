@@ -178,6 +178,24 @@ def describe_screenshot(path: str, question: str) -> str:
 
 
 @server.tool()
+def make_cover_letter(job_id: str, text: str) -> str:
+    """Make a PDF of a cover letter, for a form that requires a cover letter FILE upload (a text box needs
+    no file). Write the letter first, following config/writing_style.md and the cover letter policy, then pass
+    its full text here and upload the returned file with browser_file_upload.
+
+    job_id: the queue id of the job. text: the whole letter, plain text.
+    """
+    import re
+    import textpdf
+
+    folder = ROOT / "data" / "tailored" / re.sub(r"[^A-Za-z0-9._-]+", "_", job_id)
+    folder.mkdir(parents=True, exist_ok=True)
+    path = folder / "cover_letter.pdf"
+    textpdf.write_pdf(path, text.strip())
+    return f"Cover letter PDF built. Upload this file: {path}"
+
+
+@server.tool()
 def make_tailored_resume(
     job_id: str,
     bullets: dict[str, list[str]] | None = None,
