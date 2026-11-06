@@ -243,6 +243,13 @@ JOBS_PER_SESSION="${JOBS_PER_SESSION:-5}" python3 scripts/agent.py --mcp-config 
 # limit won't lift soon: stop rather than burn through the list.
 if [ "$status" != 0 ]; then
   echo "Stopping (see above). Fix the problem and run it again." >&2
+  case "$status" in
+    2) why="Claude reported a usage limit" ;;
+    5) why="every backend (Codex, Gemini, Claude) is at its usage limit or cap" ;;
+    3) why="two jobs in a row recorded nothing (see the log)" ;;
+    *) why="it hit a problem (see the log)" ;;
+  esac
+  osascript -e "display notification \"The live session stopped: $why.\" with title \"Job applier\" sound name \"Basso\"" 2>/dev/null || true
   break
 fi
 save
