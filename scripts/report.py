@@ -1,7 +1,8 @@
-"""Print a markdown summary of the latest run and refresh data/NEEDS_YOU.md, data/APPLIED.md and
-data/LEADS.md."""
+"""Print a markdown summary of the latest run and refresh data/NEEDS_YOU.md, data/REFERENCES.md,
+data/APPLIED.md and data/LEADS.md."""
 
 import json
+import re
 import sys
 import urllib.parse
 
@@ -16,6 +17,9 @@ def cell(text):
 def table(rows, cols):
     head = "| " + " | ".join(c for c, _ in cols) + " |\n|" + "---|" * len(cols) + "\n"
     return head + "".join("| " + " | ".join(cell(str(f(r))) for _, f in cols) + " |\n" for r in rows)
+
+
+REFERENCES = re.compile(r"\\b(professional |personal |work )?(references?|referees?)\\b", re.I)
 
 
 def latest_by_id(rows):
@@ -56,14 +60,25 @@ def main():
 
     current = latest_by_id(rows)
     assist = [r for r in current if needs_assist(r)]
-    needs = [r for r in current if r["status"] == "needs_human" and not needs_assist(r)]
+    needs_all = [r for r in current if r["status"] == "needs_human" and not needs_assist(r)]
+    # Jobs that need professional references get their own list: they wait until the candidate has
+    # references to give, which is a different thing from a question to answer.
+    wants_refs = [r for r in needs_all if REFERENCES.search(r["reason"])]
+    needs = [r for r in needs_all if r not in wants_refs]
+    (DATA / "REFERENCES.md").write_text(
+        f"# Applications that need references ({len(wants_refs)})\n\n"
+        "These ask for professional references (name, phone, employer, relationship) that the profile "
+        "doesn't have. Add references to config/profile.yaml, or apply by hand, then requeue them.\n\n"
+        + (table(wants_refs, cols[1:] + [("Notes", lambda r: r.get("notes", ""))]) if wants_refs else "_None right now._\n")
+    )
     (DATA / "NEEDS_YOU.md").write_text(
         "# Applications that need you\n\n"
         "The agent can't do these on its own: an unusual requirement (a video, an assessment, an "
         "emailed application) or a question it couldn't answer truthfully from your profile. "
         "Finish them by hand, or add the missing answer to config/profile.yaml.\n\n"
         f"_Not listed: {len(assist)} job(s) stopped on a CAPTCHA, bot check or emailed code; "
-        "`scripts/assist.sh --my-browser` works through those with you._\n\n"
+        "`scripts/assist.sh --my-browser` works through those with you; "
+        f"{len(wants_refs)} job(s) that need references are in REFERENCES.md._\n\n"
         + (table(needs, cols[1:] + [("Notes", lambda r: r.get("notes", ""))]) if needs else "_Nothing right now._\n")
     )
     applied = [r for r in current if r["status"] == "submitted"]
