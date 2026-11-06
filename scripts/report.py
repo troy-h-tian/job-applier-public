@@ -19,7 +19,7 @@ def table(rows, cols):
     return head + "".join("| " + " | ".join(cell(str(f(r))) for _, f in cols) + " |\n" for r in rows)
 
 
-REFERENCES = re.compile(r"\\b(professional |personal |work )?(references?|referees?)\\b", re.I)
+REFERENCES = re.compile(r"\b(references?|referees?)\b", re.I)
 
 
 def latest_by_id(rows):
