@@ -148,6 +148,21 @@ def paused(name):
 def pause(name, message):
     """Pause a backend until the reset time its limit message gives ("try again in 2 hours 5
     minutes"), or for an hour."""
+    # "try again at 4:46 PM" or "try again at Nov 6th, 2026 10:43 AM", in this machine's time zone
+    at = re.search(r"try again at (?:(\w{3})\w* (\d{1,2})(?:st|nd|rd|th)?,? (\d{4}) )?(\d{1,2}:\d{2} ?[AP]M)", message, re.I)
+    if at:
+        try:
+            clock = dt.datetime.strptime(at.group(4).replace(" ", "").upper(), "%I:%M%p").time()
+            now_local = dt.datetime.now().astimezone()
+            if at.group(1):
+                day = dt.datetime.strptime(f"{at.group(1)} {at.group(2)} {at.group(3)}", "%b %d %Y").date()
+            else:
+                day = now_local.date() + (dt.timedelta(days=1) if now_local.time() > clock else dt.timedelta())
+            until = dt.datetime.combine(day, clock, tzinfo=now_local.tzinfo).astimezone(dt.timezone.utc)
+            (ROOT / "data" / f".paused_{name}").write_text(until.isoformat(timespec="seconds"))
+            return until
+        except ValueError:
+            pass
     m = re.search(r"in ((?:\d+\s*(?:days?|hours?|hrs?|minutes?|mins?)[\s,and]*)+)", message, re.I)
     wait = dt.timedelta(hours=1)
     if m:
